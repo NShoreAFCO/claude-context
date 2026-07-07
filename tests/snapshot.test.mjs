@@ -42,6 +42,24 @@ test('readSnapshot returns null on missing/malformed', () => {
   assert.equal(readSnapshot('/no/such/file.json', {}), null);
 });
 
+test('readSnapshot returns null when updated_at is missing/invalid', () => {
+  const p = tmpFile();
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  // Present, parseable JSON with real content but no updated_at at all.
+  fs.writeFileSync(p, JSON.stringify({ context: { used_percentage: 46 } }));
+  assert.equal(readSnapshot(p, { now: 5000 }), null);
+  // Present, parseable JSON with an explicitly invalid updated_at value.
+  fs.writeFileSync(p, JSON.stringify({ updated_at: 'not-a-date', context: {} }));
+  assert.equal(readSnapshot(p, { now: 5000 }), null);
+});
+
+test('readSnapshot returns null on corrupt JSON file', () => {
+  const p = tmpFile();
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, '{not json');
+  assert.equal(readSnapshot(p, { now: 5000 }), null);
+});
+
 test('writeSnapshot skips unchanged content within throttle window', () => {
   const p = tmpFile();
   writeSnapshot(p, snap(), { now: 1000 });
