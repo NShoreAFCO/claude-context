@@ -1,7 +1,10 @@
 // Adapted from claude-hud (MIT, © Jarrod Watts): epoch parsing + reset formatting.
 export function epochToMs(value) {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null;
-  return value > 1e12 ? value : value * 1000;
+  const ms = value > 1e12 ? value : value * 1000;
+  // ECMAScript caps Date at ±8.64e15 ms; beyond it new Date(ms).toISOString() throws.
+  if (ms > 8.64e15) return null;
+  return ms;
 }
 
 export function formatDuration(totalSeconds) {
