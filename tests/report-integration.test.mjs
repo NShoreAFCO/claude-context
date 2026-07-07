@@ -16,10 +16,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { buildSnapshot } from '../scripts/collect.mjs';
-import { writeSnapshot } from '../scripts/lib/snapshot.mjs';
-import { snapshotFileName } from '../scripts/lib/config-dir.mjs';
-import { resolveReport, assembleReport } from '../scripts/report.mjs';
+import { buildSnapshot } from '../plugins/claude-context/scripts/collect.mjs';
+import { writeSnapshot } from '../plugins/claude-context/scripts/lib/snapshot.mjs';
+import { snapshotFileName } from '../plugins/claude-context/scripts/lib/config-dir.mjs';
+import { resolveReport, assembleReport } from '../plugins/claude-context/scripts/report.mjs';
 
 const NOW = Date.parse('2026-07-07T13:00:04.000Z');
 

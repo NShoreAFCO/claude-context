@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const skill = readFileSync(path.join(root, 'SKILL.md'), 'utf8');
+const skill = readFileSync(path.join(root, 'plugins', 'claude-context', 'SKILL.md'), 'utf8');
 
 test('frontmatter declares name and description', () => {
   assert.match(skill, /^---\n[\s\S]*\nname:\s*claude-context\b/m);

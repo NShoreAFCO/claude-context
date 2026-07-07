@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { lastAssistantUsage, countCompactions, findNewestTranscript, transcriptForSession } from '../scripts/lib/transcript.mjs';
+import { lastAssistantUsage, countCompactions, findNewestTranscript, transcriptForSession } from '../plugins/claude-context/scripts/lib/transcript.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const session = path.join(here, 'fixtures', 'session.jsonl');

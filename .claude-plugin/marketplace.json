@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "claude-context",
-      "source": "./",
+      "source": "./plugins/claude-context",
       "description": "Report the current session's context window, 5h/7d subscription usage, cost, and compactions on demand — for users and agents. Pure measurements, no recommendations.",
       "category": "monitoring",
       "tags": ["context", "usage", "rate-limits", "statusline", "telemetry"]

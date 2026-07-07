@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { resolveConfigDir, snapshotDir, snapshotFileName, snapshotPath, resolveSessionId } from '../scripts/lib/config-dir.mjs';
+import { resolveConfigDir, snapshotDir, snapshotFileName, snapshotPath, resolveSessionId } from '../plugins/claude-context/scripts/lib/config-dir.mjs';
 
 test('honors CLAUDE_CONFIG_DIR when set', () => {
   assert.equal(resolveConfigDir({ CLAUDE_CONFIG_DIR: '/tmp/cfg' }), '/tmp/cfg');

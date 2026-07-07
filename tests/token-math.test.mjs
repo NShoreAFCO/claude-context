@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { usedTokens, percentage, headroom } from '../scripts/lib/token-math.mjs';
+import { usedTokens, percentage, headroom } from '../plugins/claude-context/scripts/lib/token-math.mjs';
 
 test('usedTokens sums input + cache read + cache creation', () => {
   assert.equal(usedTokens({ input_tokens: 1200, cache_read_input_tokens: 88000, cache_creation_input_tokens: 2800, output_tokens: 500 }), 92000);

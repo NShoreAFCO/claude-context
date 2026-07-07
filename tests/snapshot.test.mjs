@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { writeSnapshot, readSnapshot, findNewestSnapshot, FRESHNESS_MS } from '../scripts/lib/snapshot.mjs';
+import { writeSnapshot, readSnapshot, findNewestSnapshot, FRESHNESS_MS } from '../plugins/claude-context/scripts/lib/snapshot.mjs';
 
 function tmpFile() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-'));

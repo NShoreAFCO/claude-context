@@ -10,7 +10,7 @@ process.env.TZ = 'UTC';
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { assembleReport } from '../scripts/report.mjs';
+import { assembleReport } from '../plugins/claude-context/scripts/report.mjs';
 
 const NOW = Date.parse('2026-07-07T13:00:04.000Z');
 const collectorRes = {

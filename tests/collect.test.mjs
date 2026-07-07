@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
-import { buildSnapshot, compactLine, runCli } from '../scripts/collect.mjs';
+import { buildSnapshot, compactLine, runCli } from '../plugins/claude-context/scripts/collect.mjs';
 
 const stdin = {
   model: { id: 'claude-opus-4-8', display_name: 'Opus 4.8' },
