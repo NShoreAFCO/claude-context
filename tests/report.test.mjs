@@ -104,7 +104,15 @@ test('no-advice contract: rendered output carries no advice/level vocabulary in 
   const forbidden = [/should compact/i, /recommend/i, /\byou should\b/i, /traffic.light/i, /\bpressure\b/i, /\b(70|85|90)%/];
   const staleRes = { ...collectorRes, source: 'transcript', rateLimits: null, rateLimitsStatus: 'unavailable_stale', snapshotAgeSeconds: 420, sessionSelection: 'newest-in-cwd-heuristic', windowInferred: false };
   const coldRes = { source: 'unavailable', model: {}, context: null, rateLimits: null, rateLimitsStatus: 'unavailable_collector', cost: null, compactions: 0, sessionSelection: null, snapshotAgeSeconds: null };
-  for (const res of [collectorRes, staleRes, coldRes]) {
+  const planRes = { ...collectorRes, rateLimits: null, rateLimitsStatus: 'unavailable_plan' };
+  const providerRes = { ...collectorRes, rateLimits: null, rateLimitsStatus: 'unavailable_provider' };
+  const transcriptInferredRes = {
+    source: 'transcript', model: { id: 'claude-opus-4-8', display_name: '' },
+    context: { window_size: 200000, used_tokens: 92000, used_percentage: 46, input_tokens: 1200, cache_read_tokens: 88000, cache_creation_tokens: 2800, output_tokens: 0 },
+    rateLimits: null, rateLimitsStatus: 'unavailable_collector', cost: null, compactions: 1,
+    sessionSelection: 'newest-in-cwd-heuristic', snapshotAgeSeconds: null, windowInferred: true,
+  };
+  for (const res of [collectorRes, staleRes, coldRes, planRes, providerRes, transcriptInferredRes]) {
     const { human, json } = assembleReport(res, NOW);
     const blob = `${human}\n${JSON.stringify(json)}`;
     for (const re of forbidden) assert.doesNotMatch(blob, re);

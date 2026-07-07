@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { usedTokens, percentage } from './lib/token-math.mjs';
 import { epochToMs } from './lib/time.mjs';
