@@ -13,7 +13,7 @@
 Every task's requirements implicitly include this section. Values are copied verbatim from the design spec (`docs/superpowers/specs/2026-07-07-claude-context-plugin-design.md`).
 
 - **Runtime:** self-contained Node ESM; **zero dependencies; no build step**. All scripts are `.mjs` run directly. Requires Node 18+ or Bun.
-- **Instrument, not advisor:** output carries **no** recommendations, evaluative/level/traffic-light labels, policy (no "should compact", no 70/85/90 rules), or derived/predictive metrics. Raw measurements and provenance only. The no-advice denylist is asserted against the **rendered `report.mjs` output across every state** (Task 9), not only against `SKILL.md`; the tests guarantee the *report emits* no advice vocabulary and no `suggested_action`/level fields — they cannot govern what a consuming agent then says, so `SKILL.md` also instructs the caller to relay the numbers without editorializing.
+- **Instrument, not advisor:** output carries **no** recommendations, evaluative/level/traffic-light labels, policy (no "should compact", no 70/85/90 rules), or derived/predictive metrics. Raw measurements and provenance only. The no-advice denylist is asserted against the **rendered `report.mjs` output across every state** (Task 9), **not by grepping `SKILL.md`** — whose own text legitimately names the advice vocabulary it refuses to emit (e.g. "makes no recommendations"). The tests guarantee the *report emits* no advice vocabulary and no `suggested_action`/level fields — they cannot govern what a consuming agent then says, so `SKILL.md` states the data-only contract and instructs the caller to relay the numbers without editorializing.
 - **Snapshot path:** `<config-dir>/claude-context/snapshot.json`, mode `0600`, where `<config-dir>` is `process.env.CLAUDE_CONFIG_DIR` when set and non-empty, otherwise `os.homedir()/.claude`. Writer and reader resolve it identically.
 - **Native fields:** prefer `context_window.used_percentage` over recomputing, **but treat a native `used_percentage` of `0` (or non-finite) as "not yet populated" and fall through to the token-based calculation** — mirroring claude-hud's `getNativePercent`. On a fresh session Claude Code emits `used_percentage=0` before the first API response while `current_usage` already holds the real initial-context tokens (system prompt, tools, memory), so trusting the literal `0` would report `Context 0%` when the window is already partly full. Treat `rate_limits.*.resets_at` from stdin as a **Unix epoch in seconds** and multiply by 1000 before converting to ISO. (Rate-limit `used_percentage` keeps `0` as a valid value; the `0 = unpopulated` guard applies only to context.)
 - **Conditional rate limits:** `rate_limits` is present only for Pro/Max subscribers after the first API response, and is absent for API-key accounts, Bedrock/Vertex providers, and older Claude Code versions. Absence is therefore reported as one of several distinct `rate_limits_status` values, never collapsed to a single "this plan" verdict: `available`; `unavailable_plan` (fresh snapshot, non-provider account, no window reported — covers both genuine no-subscription and the transient pre-first-response window, so its copy must not assert permanence); `unavailable_provider` (Bedrock/Vertex, detected from the model id or `CLAUDE_CODE_USE_BEDROCK`/`CLAUDE_CODE_USE_VERTEX`); `unavailable_stale` (a snapshot exists but is past the freshness window); `unavailable_collector` (no snapshot has ever been written).
@@ -1403,9 +1403,13 @@ test('tells Claude to run report.mjs', () => {
   assert.match(skill, /scripts\/report\.mjs/);
 });
 
-test('data-only contract: no advice/level vocabulary', () => {
-  const forbidden = [/should compact/i, /recommend/i, /\byou should\b/i, /traffic.light/i, /\bpressure\b/i, /70%|85%|90%/];
-  for (const re of forbidden) assert.doesNotMatch(skill, re);
+test('states the data-only contract and tells the caller not to editorialize', () => {
+  assert.match(skill, /instrument, not an? advisor/i);
+  assert.match(skill, /pass the measurements through as-is/i);
+  // The enforceable no-advice guarantee lives in Task 9 (denylist over report.mjs
+  // OUTPUT). This doc legitimately uses words like "recommendations" / "you should"
+  // to describe what the caller must NOT add, so grepping the doc for that
+  // vocabulary would false-positive on the contract's own statement.
 });
 ```
 
@@ -1419,7 +1423,7 @@ Expected: FAIL — `ENOENT` opening `SKILL.md`.
 ````markdown
 ---
 name: claude-context
-description: Report the current session's resource facts — context window occupancy, 5-hour and 7-day subscription usage, session cost, and compaction count — as pure measurements with provenance. Use when you or the user want to know how much context, session/weekly quota, or cost the session has consumed. Emits a human summary and a machine-readable JSON block. Makes no recommendations.
+description: Report the current session's resource facts — context-window occupancy, 5-hour and 7-day subscription usage, session cost, and compaction count — as pure measurements with provenance (human summary + machine-readable JSON block). Use when you or the user want to know how much context, quota, or cost the session has used — and, for agents and subagents, to gate your own behavior on those numbers: checkpoint or stop as context fills up (before Claude Code's auto-compaction silently drops CLAUDE.md guidance or recent instructions), or pause before exhausting the 5h/7d limit. Reports facts only; your instructions set the policy. Makes no recommendations.
 ---
 
 # claude-context
@@ -1813,15 +1817,27 @@ Copyright (c) Jarrod Watts, licensed under the MIT License. Its permission notic
 is retained in the adapted source files under scripts/lib/.
 ```
 
-`README.md` — cover:
-- What it is: on-demand session resource facts for users and agents; an
-  instrument with **no advice, no recommendations**.
+`README.md` — cover (**lead with the agent-facing value**):
+- What it is: a live, machine-readable read of the session's own context window,
+  5h/7d usage, and cost that **agents and subagents** can query and act on — gating
+  their behavior on the user's rules (checkpoint/stop as context fills, *before*
+  Claude Code's silent auto-compaction drops CLAUDE.md guidance or recent
+  instructions; pause before exhausting the weekly budget). Humans can read the same
+  summary on demand.
+- Instrument, not advisor — **by design, as the enabler**: it reports facts with
+  **no advice, no recommendations**; the user's instructions (CLAUDE.md, skills,
+  subagent prompts) set the policy. Motivate with the real auto-compaction reports
+  (claude-code#22376 "auto-compact loses last-request instructions"; #24460 & #6354
+  "CLAUDE.md lost after compaction").
 - Install: `/plugin marketplace add Ovid/claude-context` → `/plugin install claude-context`.
 - Use: `/claude-context:claude-context` (short `/claude-context`) works immediately
-  in transcript-only mode. Run `/claude-context:setup` to enable live 5h/7d usage
-  and cost via the opt-in collector.
+  in transcript-only mode, returning a human summary **and** a JSON block agents
+  parse. Run `/claude-context:setup` to enable live 5h/7d usage and cost via the
+  opt-in collector.
 - The collector needs the single `statusLine` slot; setup does replace-or-keep if
   one exists. Note 5h/7d requires a Pro/Max subscription.
+- Provenance/trust: every number carries `source` / `rate_limits_status` /
+  `window_size_inferred` so an agent's rule never fires on a stale or estimated value.
 - Acknowledgement: adapted from claude-hud (MIT).
 
 `CHANGELOG.md`:
@@ -1860,7 +1876,7 @@ git commit -m "docs: add README, LICENSE (with claude-hud attribution), CHANGELO
 
 **1. Spec coverage**
 
-- §1 Purpose / instrument-not-advisor → enforced by Task 9's **runtime-output denylist across all states** (plus `suggested_action`/label assertions), Task 10's forbidden-vocabulary test **and its explicit no-editorializing relay instruction**, and §9 non-goals. Global Constraints scope the "verified by tests" claim to what the tests actually check (the *report's* output), not a consuming agent's phrasing.
+- §1 Purpose / instrument-not-advisor → enforced by Task 9's **runtime-output denylist across all states** (plus `suggested_action`/label assertions), and Task 10's **data-only-contract assertion + no-editorializing relay instruction** (the doc *states* the contract; Task 9 *enforces* it against output — a substring grep over the doc would false-positive on the contract's own wording), and §9 non-goals. Global Constraints scope the "verified by tests" claim to what the tests actually check (the *report's* output), not a consuming agent's phrasing.
 - §2 native fields (incl. the **`used_percentage=0`→token-fallback guard**), epoch-seconds, and the **fuller rate-limit state set** (`available`/`unavailable_plan`/`unavailable_provider`/`unavailable_stale`/`unavailable_collector`, with Bedrock/Vertex detection) → Tasks 4, 5, 8, 9.
 - §3 approaches (differentiation from `/context`,`/usage`) → README (Task 12); not code.
 - §4.1 collector (parse, snapshot, compact line, `--silent`) → Task 8.
