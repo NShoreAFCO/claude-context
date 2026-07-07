@@ -35,7 +35,7 @@ ever been written** (not on transcript availability):
 | State | Trigger | Context | 5h / 7d / cost | Compactions | `source` |
 |---|---|---|---|---|---|
 | **Collector active** | Fresh snapshot for this session (or newest) | Full, from snapshot | Present (or typed-unavailable) | From snapshot's `transcript_path` | `collector` |
-| **Collector idle** | A snapshot exists but is past the freshness window | Accurate — transcript's latest usage against the snapshot's **real** window size | `null`, flagged `unavailable_stale` | From transcript | `transcript` |
+| **Collector idle** | A snapshot exists but is past the freshness window | Accurate — transcript's latest usage against the snapshot's **real** window size (or the stale snapshot's own `context` if the transcript has no usage) | `null`, flagged `unavailable_stale` | From transcript | `transcript` (→ `collector` on the snapshot-context fallback; see §2.1) |
 | **Not set up** | **No snapshot has ever been written** | **None** | `null`, flagged `unavailable_collector` | **None** | `unavailable` |
 
 ### 2.1 The only logic change
@@ -44,10 +44,17 @@ The transcript-context branch in `resolveReport` must run **only when a snapshot
 supplied a real window size** (`knownWindow > 0`). Concretely:
 
 - **Snapshot exists but stale** (`knownWindow > 0`): unchanged. Report the transcript's
-  latest usage against the real window (accurate `%`), compactions from the transcript,
-  rate limits/cost `null` (`unavailable_stale`). If the transcript yields no usage,
-  fall back to the **stale snapshot's own `context` field** (it already carries the real
-  window), still flagged stale — never tell an already-set-up user to run setup.
+  latest usage against the real window (accurate `%`, `source: transcript`), compactions
+  from the transcript, rate limits/cost `null` (`unavailable_stale`). If the transcript
+  yields no usage, fall back to the **stale snapshot's own `context` field** (it already
+  carries the real window), still flagged stale — never tell an already-set-up user to run
+  setup. **Provenance in this fallback sub-case:** because the numbers now come from the
+  snapshot rather than the transcript, report `source: collector` (not `transcript`) — the
+  figures genuinely originate in the collector's snapshot, distinguished from a live
+  reading only by `rate_limits_status: unavailable_stale` and the reported
+  `snapshot_age_seconds`. This keeps `source` an honest origin label instead of overloading
+  it to mean "the idle bucket," so a consumer's rule never mistakes snapshot-derived
+  context for transcript-derived context.
 - **No snapshot at all** (`knownWindow` absent): **do not read the transcript.**
   Return the *not-set-up* state directly. No window is ever inferred.
 
@@ -116,7 +123,7 @@ provenance — "no data" means null values, not an absent response:
 ```
 /                                       ← marketplace catalog + dev infra (NOT shipped)
 ├── .claude-plugin/marketplace.json     ← plugin entry source: "./plugins/claude-context"
-├── README.md · CLAUDE.md               ← project front page + agent guidance
+├── README.md · CLAUDE.md · LICENSE     ← project front page, agent guidance, canonical license
 ├── docs/ · paad/                       ← design records, reviews
 ├── package.json                        ← dev tooling; test glob unchanged
 ├── tests/  (+ tests/fixtures/)         ← stays at root so it does NOT ship
@@ -131,9 +138,12 @@ provenance — "no data" means null values, not an absent response:
 **Moves** into `plugins/claude-context/`: `plugin.json`, `SKILL.md`, `commands/`,
 `scripts/` (with `lib/`), and a **copy** of `LICENSE`.
 
-**Stays** at repo root: `marketplace.json`, `README.md`, `CLAUDE.md`, `docs/`, `paad/`,
-`package.json`, and `tests/` (with `fixtures/`). Keeping tests outside the plugin dir is
-deliberate — it is the reason for nesting: the shipped/cached plugin stays lean.
+**Stays** at repo root: `marketplace.json`, `README.md`, `CLAUDE.md`, `LICENSE` (the
+canonical repo license — the plugin's `LICENSE` is a *copy in addition to*, not a
+replacement for, this one, so GitHub license detection and `tests/docs.test.mjs`'s root
+read both keep working), `docs/`, `paad/`, `package.json`, and `tests/` (with `fixtures/`).
+Keeping tests outside the plugin dir is deliberate — it is the reason for nesting: the
+shipped/cached plugin stays lean.
 
 **Path rewrites required:**
 
@@ -183,12 +193,33 @@ deliberate — it is the reason for nesting: the shipped/cached plugin stays lea
 
 ## 7. Testing impact
 
-- **Delete** `tests/model-window.test.mjs`.
-- **Update** `tests/report.test.mjs` and `tests/report-integration.test.mjs`: cold start
-  now asserts the not-set-up human block + all-null JSON + `setup_required: true` +
-  `compactions: null` (previously it asserted an inferred-window `~%`). Add/keep a
-  stale-snapshot case asserting an accurate `%` against the real window.
-- **Update** import paths in every test file to the nested `scripts/` location.
+The move touches more test files than just the ones with `../scripts/…` imports. Group the
+edits by *kind* so none is missed — following "update import paths" literally leaves the
+`readFileSync` data paths and the `source` assertion stale and turns `npm test` red:
+
+- **Delete** — `tests/model-window.test.mjs` (its helper and field are gone, §3).
+- **Import specifiers** (`../scripts/…` → `../plugins/claude-context/scripts/…`), the
+  eight surviving importers: `report.test.mjs`, `report-integration.test.mjs`,
+  `collect.test.mjs`, `config-dir.test.mjs`, `snapshot.test.mjs`, `transcript.test.mjs`,
+  `token-math.test.mjs`, `time.test.mjs`. Fixture paths (`fixtures/…`) are unchanged.
+- **`readFileSync` data paths** — files that *moved* under `plugins/claude-context/`:
+  - `tests/manifest.test.mjs`: read `plugin.json` from the **nested**
+    `plugins/claude-context/.claude-plugin/plugin.json`; keep reading `marketplace.json`
+    from the **root** `.claude-plugin/marketplace.json` (it stays). The two `readJson`
+    calls now resolve against different base paths.
+  - `tests/setup.test.mjs`: `commands/setup.md` → `plugins/claude-context/commands/setup.md`.
+  - `tests/skill.test.mjs`: `SKILL.md` → `plugins/claude-context/SKILL.md`.
+  - `tests/docs.test.mjs`: `README.md`, `CHANGELOG.md`, and `LICENSE` **all stay at root**
+    (LICENSE by the §4 decision), so this file needs **no path change** — listed here only
+    to record that it was checked, not overlooked.
+- **Assertion-value change** — `tests/manifest.test.mjs` asserts `plugins[0].source ===
+  './'`; update it to `'./plugins/claude-context'` to match §4.
+- **Behavioral updates** — `tests/report.test.mjs` and `tests/report-integration.test.mjs`:
+  cold start now asserts the not-set-up human block + all-null JSON + `setup_required: true`
+  + `compactions: null` (previously it asserted an inferred-window `~%`). Add/keep a
+  stale-snapshot case asserting an accurate `%` against the real window, **and** a
+  snapshot-context fallback case asserting `source: collector` +
+  `rate_limits_status: unavailable_stale` (§2.1).
 - **Verify** the denylist test covers the new cold-start rendering.
 - `npm test` (`node --test tests/*.test.mjs`) remains the runner; glob unchanged.
 
