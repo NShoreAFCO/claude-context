@@ -44,6 +44,24 @@ export function writeSnapshot(snapshotPath, snapshot, { now = Date.now(), deps =
   }
 }
 
+// Fallback for when the report can't identify its own session (older Claude Code,
+// or a subagent): the newest snapshot-*.json in the dir. It may belong to another
+// concurrent session, so callers must flag its provenance as unverified.
+export function findNewestSnapshot(dir, { deps = fs } = {}) {
+  let files;
+  try { files = deps.readdirSync(dir); } catch { return null; }
+  let newest = null;
+  let newestMtime = -Infinity;
+  for (const f of files) {
+    if (!f.startsWith('snapshot') || !f.endsWith('.json')) continue; // skips dot-prefixed .tmp files
+    const full = path.join(dir, f);
+    let mtime;
+    try { mtime = deps.statSync(full).mtimeMs; } catch { continue; }
+    if (mtime > newestMtime) { newestMtime = mtime; newest = full; }
+  }
+  return newest;
+}
+
 export function readSnapshot(snapshotPath, { now = Date.now(), freshnessMs = FRESHNESS_MS, deps = fs } = {}) {
   try {
     const snapshot = JSON.parse(deps.readFileSync(snapshotPath, 'utf8'));

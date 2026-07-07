@@ -1,9 +1,10 @@
 // scripts/report.mjs
 import fs from 'node:fs';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { readSnapshot } from './lib/snapshot.mjs';
-import { snapshotPath, resolveConfigDir } from './lib/config-dir.mjs';
-import { lastAssistantUsage, countCompactions, findNewestTranscript } from './lib/transcript.mjs';
+import { readSnapshot, findNewestSnapshot } from './lib/snapshot.mjs';
+import { snapshotDir, snapshotFileName, resolveConfigDir, resolveSessionId } from './lib/config-dir.mjs';
+import { lastAssistantUsage, countCompactions, findNewestTranscript, transcriptForSession } from './lib/transcript.mjs';
 import { usedTokens, percentage, headroom } from './lib/token-math.mjs';
 import { inferWindowSize } from './lib/model-window.mjs';
 import { formatDuration, clockHM } from './lib/time.mjs';
@@ -17,8 +18,22 @@ function isProviderModel(id, env = process.env) {
   return env?.CLAUDE_CODE_USE_BEDROCK === '1' || env?.CLAUDE_CODE_USE_VERTEX === '1';
 }
 
-export function resolveReport({ now, snapshotPath: sp, cwd, deps = fs, env = process.env }) {
-  const read = readSnapshot(sp, { now, deps });
+export function resolveReport({ now, sessionId = null, snapshotDir: dir, cwd, deps = fs, env = process.env }) {
+  // 1. Prefer THIS session's own keyed snapshot — the only one guaranteed to describe
+  //    our context/compactions. `identified` records that we matched it by session id.
+  let read = null;
+  let identified = false;
+  if (sessionId && dir) {
+    read = readSnapshot(path.join(dir, snapshotFileName(sessionId)), { now, deps });
+    if (read) identified = true;
+  }
+  // 2. Couldn't identify our own snapshot (no session id, or its file is absent): fall
+  //    back to the newest snapshot in the dir. Under concurrent sessions it may belong
+  //    to a different one, so its provenance is flagged 'unverified-snapshot'.
+  if (!read && dir) {
+    const newest = findNewestSnapshot(dir, { deps });
+    if (newest) read = readSnapshot(newest, { now, deps });
+  }
 
   if (read && read.fresh) {
     const s = read.snapshot;
@@ -33,7 +48,7 @@ export function resolveReport({ now, snapshotPath: sp, cwd, deps = fs, env = pro
       rateLimitsStatus,
       cost: numOrNull(s.cost?.total_cost_usd),
       compactions,
-      sessionSelection: 'transcript_path',
+      sessionSelection: identified ? 'session_id' : 'unverified-snapshot',
       snapshotAgeSeconds: read.ageSeconds,
       windowInferred: false,
     };
@@ -47,7 +62,14 @@ export function resolveReport({ now, snapshotPath: sp, cwd, deps = fs, env = pro
   const fallbackStatus = read ? 'unavailable_stale' : 'unavailable_collector';
 
   const configDir = resolveConfigDir(env);
-  const transcript = findNewestTranscript(configDir, cwd, deps);
+  // Prefer our OWN transcript (deterministic from the session id) over the cwd heuristic,
+  // which can't distinguish two sessions sharing a directory.
+  let transcript = sessionId ? transcriptForSession(configDir, cwd, sessionId, deps) : null;
+  let transcriptSelection = transcript ? 'session_id' : null;
+  if (!transcript) {
+    transcript = findNewestTranscript(configDir, cwd, deps);
+    if (transcript) transcriptSelection = 'newest-in-cwd-heuristic';
+  }
   const usage = transcript ? lastAssistantUsage(transcript, deps) : null;
   const compactions = transcript ? countCompactions(transcript, deps) : 0;
 
@@ -72,7 +94,7 @@ export function resolveReport({ now, snapshotPath: sp, cwd, deps = fs, env = pro
       rateLimitsStatus: fallbackStatus,
       cost: null,
       compactions,
-      sessionSelection: 'newest-in-cwd-heuristic',
+      sessionSelection: transcriptSelection,
       snapshotAgeSeconds: staleAge,
       windowInferred,
     };
@@ -81,7 +103,7 @@ export function resolveReport({ now, snapshotPath: sp, cwd, deps = fs, env = pro
   return {
     source: 'unavailable', model: staleSnapshot?.model ?? {}, context: null, rateLimits: null,
     rateLimitsStatus: fallbackStatus, cost: null, compactions,
-    sessionSelection: transcript ? 'newest-in-cwd-heuristic' : null,
+    sessionSelection: transcriptSelection,
     snapshotAgeSeconds: staleAge, windowInferred: false,
   };
 }
@@ -173,12 +195,18 @@ function rlLine(label, r, w, now) {
   }
 }
 
+function sessionNote(r) {
+  if (r.sessionSelection === 'unverified-snapshot') return ' · session: unverified (newest snapshot)';
+  return '';
+}
+
 function sourceLine(r) {
-  if (r.source === 'collector') return `Source: collector · snapshot ${r.snapshotAgeSeconds}s old`;
+  if (r.source === 'collector') return `Source: collector · snapshot ${r.snapshotAgeSeconds}s old${sessionNote(r)}`;
   if (r.source === 'transcript') {
     const win = r.windowInferred ? 'window inferred' : 'window from snapshot';
     const age = r.snapshotAgeSeconds != null ? ` · snapshot ${r.snapshotAgeSeconds}s old (stale)` : '';
-    return `Source: transcript fallback · context only · ${win}${age} · session: newest-in-cwd (heuristic)`;
+    const sess = r.sessionSelection === 'session_id' ? 'this session' : 'newest-in-cwd (heuristic)';
+    return `Source: transcript fallback · context only · ${win}${age} · session: ${sess}`;
   }
   return 'Source: unavailable';
 }
@@ -207,7 +235,10 @@ export function assembleReport(r, now) {
 const isMain = import.meta.url === pathToFileURL(process.argv[1] ?? '').href;
 if (isMain) {
   const now = Date.now();
-  const resolution = resolveReport({ now, snapshotPath: snapshotPath(), cwd: process.cwd(), deps: fs });
+  const sessionId = resolveSessionId({ argv: process.argv, env: process.env });
+  const resolution = resolveReport({
+    now, sessionId, snapshotDir: snapshotDir(process.env), cwd: process.cwd(), deps: fs, env: process.env,
+  });
   const { human, json } = assembleReport(resolution, now);
   process.stdout.write(`${human}\n\n`);
   process.stdout.write('```json\n');

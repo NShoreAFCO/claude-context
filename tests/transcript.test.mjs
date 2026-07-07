@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { lastAssistantUsage, countCompactions, findNewestTranscript } from '../scripts/lib/transcript.mjs';
+import { lastAssistantUsage, countCompactions, findNewestTranscript, transcriptForSession } from '../scripts/lib/transcript.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const session = path.join(here, 'fixtures', 'session.jsonl');
@@ -29,6 +31,20 @@ test('countCompactions counts only timestamped compact_boundary entries', () => 
 test('findNewestTranscript encodes cwd and finds newest jsonl', () => {
   // fixtures/ is not a projects dir, so a non-existent cwd resolves to null safely.
   assert.equal(findNewestTranscript('/no/such/dir', '/Users/x/proj'), null);
+});
+
+test('transcriptForSession resolves this session\'s own transcript deterministically', () => {
+  const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-ts-'));
+  const cwd = '/Users/x/proj';
+  const encoded = cwd.replace(/[/\\.]/g, '-'); // matches findNewestTranscript's encoding
+  const projDir = path.join(configDir, 'projects', encoded);
+  fs.mkdirSync(projDir, { recursive: true });
+  const sid = '9cb01c18-f694-4be3-b629-212faf066563';
+  const file = path.join(projDir, `${sid}.jsonl`);
+  fs.writeFileSync(file, '');
+  assert.equal(transcriptForSession(configDir, cwd, sid), file);
+  assert.equal(transcriptForSession(configDir, cwd, 'no-such-session'), null); // absent
+  assert.equal(transcriptForSession(configDir, cwd, null), null);              // unknown session
 });
 
 const real = path.join(here, 'fixtures', 'real-transcript.jsonl');

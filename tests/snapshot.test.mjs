@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { writeSnapshot, readSnapshot, FRESHNESS_MS } from '../scripts/lib/snapshot.mjs';
+import { writeSnapshot, readSnapshot, findNewestSnapshot, FRESHNESS_MS } from '../scripts/lib/snapshot.mjs';
 
 function tmpFile() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-'));
@@ -82,6 +82,24 @@ test('writeSnapshot keeps the snapshot dir private (0700), tightening a pre-exis
   fs.chmodSync(dir2, 0o755);
   writeSnapshot(path.join(dir2, 'snapshot.json'), snap(), { now: 1000 });
   assert.equal(fs.statSync(dir2).mode & 0o777, 0o700);
+});
+
+test('findNewestSnapshot returns the newest snapshot-*.json, ignoring temp and non-snapshot files', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-newest-'));
+  fs.writeFileSync(path.join(dir, 'snapshot-a.json'), '{}');
+  fs.writeFileSync(path.join(dir, 'snapshot-b.json'), '{}');
+  fs.writeFileSync(path.join(dir, '.snapshot-b.json.42.99.tmp'), '{}'); // in-flight temp: ignored
+  fs.writeFileSync(path.join(dir, 'notes.txt'), 'x'); // not a snapshot: ignored
+  const future = Math.floor(Date.now() / 1000) + 100;
+  fs.utimesSync(path.join(dir, 'snapshot-b.json'), future, future); // make b newest
+  assert.equal(findNewestSnapshot(dir), path.join(dir, 'snapshot-b.json'));
+});
+
+test('findNewestSnapshot returns null for a missing or snapshot-free dir', () => {
+  assert.equal(findNewestSnapshot('/no/such/dir'), null);
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-empty-'));
+  fs.writeFileSync(path.join(empty, 'notes.txt'), 'x');
+  assert.equal(findNewestSnapshot(empty), null);
 });
 
 test('writeSnapshot cleans up its temp file when the atomic rename fails', () => {

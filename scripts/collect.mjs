@@ -48,6 +48,7 @@ export function buildSnapshot(stdin, now) {
     rate_limits: buildRateLimits(stdin?.rate_limits),
     cost: { total_cost_usd: numOrNull(stdin?.cost?.total_cost_usd) },
     transcript_path: str(stdin?.transcript_path) || null,
+    session_id: str(stdin?.session_id) || null,
   };
 }
 
@@ -66,12 +67,14 @@ async function readStdin() {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-export async function runCli({ argv = process.argv, now = Date.now() } = {}) {
+export async function runCli({ argv = process.argv, now = Date.now(), readInput = readStdin, env = process.env } = {}) {
   const silent = argv.includes('--silent');
   let stdin = {};
-  try { stdin = JSON.parse(await readStdin()); } catch { stdin = {}; }
+  try { stdin = JSON.parse(await readInput()); } catch { stdin = {}; }
   const snapshot = buildSnapshot(stdin, now);
-  writeSnapshot(snapshotPath(), snapshot);
+  // Key by this session's id (from stdin) so concurrent same-account sessions each
+  // write their own file instead of thrashing one shared snapshot.
+  writeSnapshot(snapshotPath(snapshot.session_id, env), snapshot);
   if (!silent) process.stdout.write(`${compactLine(snapshot)}\n`);
 }
 

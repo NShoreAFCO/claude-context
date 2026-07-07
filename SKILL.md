@@ -22,11 +22,15 @@ provenance fields (`source`, `rate_limits_status`, `window_size_inferred`,
 Run the report engine with Bash and read its output:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/report.mjs"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/report.mjs" --session-id "${CLAUDE_SESSION_ID}"
 ```
 
-It prints a human-readable block and a fenced `json` block. It always succeeds,
-even with no collector running.
+Pass `--session-id` so the report reads **this** session's own snapshot rather than
+a concurrent same-account session's. `${CLAUDE_SESSION_ID}` is substituted by Claude
+Code; if your build doesn't expose it, the report falls back to the
+`CLAUDE_CODE_SESSION_ID` environment variable, then to the newest snapshot (see
+`session_selection` below). It prints a human-readable block and a fenced `json`
+block, and always succeeds even with no collector running.
 
 ## Field reference
 
@@ -49,8 +53,13 @@ even with no collector running.
   subscription usage); `unavailable_stale` (a snapshot exists but is past the
   freshness window — collector on but idle); or `unavailable_collector` (no
   snapshot has ever been written).
-- **session_selection** — `transcript_path` (pinned from the snapshot) or
-  `newest-in-cwd-heuristic` (guessed; may resolve to a different parallel session).
+- **session_selection** — how the report decided whose numbers these are:
+  `session_id` (matched this session's own id — the snapshot/transcript is
+  definitively yours); `unverified-snapshot` (this Claude Code build exposed no
+  session id, so the newest snapshot was used and may belong to another concurrent
+  same-account session); or `newest-in-cwd-heuristic` (transcript fallback chosen by
+  directory, which can't tell two sessions in the same directory apart). Gate on this
+  when it matters that the context figures are your session's and not a neighbor's.
 - **snapshot_age_seconds** — how old the snapshot is (collector mode, or the age
   of a stale snapshot reused in fallback).
 - **window_size_inferred** — `true` only when the report had no snapshot to read
@@ -62,6 +71,13 @@ even with no collector running.
 The **context** figures describe the **session** — the main agent's context window
 (the view Claude Code sends to the statusline). Subscription **usage (5h/7d)** and
 **cost** are **account-wide**, shared by the main agent and every subagent.
+
+Because several Claude Code sessions can run under one account at once, the collector
+keys its snapshot by session id and the report reads the one matching **your** session
+(`session_selection: "session_id"`). If your Claude Code build exposes no session id,
+the report falls back to the newest snapshot and flags it `unverified-snapshot` — in
+that state the context/compaction figures may be a neighbouring session's, while the
+account-wide 5h/7d/cost figures are identical across sessions and stay correct.
 
 If you are a subagent, the context percentage is the **session's**, not your own
 private window. Use it to judge whether the parent session is filling up — for

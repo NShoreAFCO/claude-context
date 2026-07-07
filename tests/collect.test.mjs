@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSnapshot, compactLine } from '../scripts/collect.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import { buildSnapshot, compactLine, runCli } from '../scripts/collect.mjs';
 
 const stdin = {
   model: { id: 'claude-opus-4-8', display_name: 'Opus 4.8' },
@@ -60,4 +62,23 @@ test('golden: real statusline stdin maps without losing fields', () => {
     assert.ok(s.rate_limits, 'rate_limits in stdin must map to a non-null snapshot block');
     assert.match(s.rate_limits.five_hour.resets_at ?? '', /^\d{4}-\d\d-\d\dT/);
   }
+});
+
+test('buildSnapshot records the stdin session id (for keying + provenance)', () => {
+  assert.equal(buildSnapshot({ session_id: 'sid-1', context_window: {} }, 0).session_id, 'sid-1');
+  assert.equal(buildSnapshot({ context_window: {} }, 0).session_id, null);
+});
+
+test('runCli writes a session-keyed snapshot so concurrent sessions never share a file', async () => {
+  const cfg = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-run-'));
+  const raw = JSON.stringify({
+    session_id: 'sid-xyz',
+    context_window: { context_window_size: 200000, current_usage: { input_tokens: 100000 } },
+  });
+  await runCli({ argv: ['node', 'collect', '--silent'], now: 0, readInput: async () => raw, env: { CLAUDE_CONFIG_DIR: cfg } });
+  const p = path.join(cfg, 'claude-context', 'snapshot-sid-xyz.json');
+  assert.ok(fs.existsSync(p), 'snapshot written to the session-keyed path');
+  const snap = JSON.parse(fs.readFileSync(p, 'utf8'));
+  assert.equal(snap.session_id, 'sid-xyz');
+  assert.equal(snap.context.used_percentage, 50);
 });

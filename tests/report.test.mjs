@@ -22,7 +22,7 @@ const collectorRes = {
     seven_day: { used_percentage: 61, resets_at: '2026-07-10T17:00:00.000Z' },
   },
   rateLimitsStatus: 'available',
-  cost: 0.42, compactions: 1, sessionSelection: 'transcript_path', snapshotAgeSeconds: 4,
+  cost: 0.42, compactions: 1, sessionSelection: 'session_id', snapshotAgeSeconds: 4,
 };
 
 test('collector JSON block is pure measurements + provenance', () => {
@@ -31,7 +31,7 @@ test('collector JSON block is pure measurements + provenance', () => {
   assert.equal(json.rate_limits.five_hour.resets_in_seconds, 5400);
   assert.equal(json.source, 'collector');
   assert.equal(json.rate_limits_status, 'available');
-  assert.equal(json.session_selection, 'transcript_path');
+  assert.equal(json.session_selection, 'session_id');
   assert.equal('suggested_action' in json, false);
 });
 
