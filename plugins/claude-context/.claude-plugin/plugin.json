@@ -1,6 +1,6 @@
 {
   "name": "claude-context",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "On-demand session resource facts (context window, 5h/7d usage, cost, compactions) for users and agents — pure measurements, no advice.",
   "author": { "name": "Ovid" },
   "license": "MIT",
