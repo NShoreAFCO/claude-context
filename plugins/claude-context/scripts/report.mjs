@@ -39,6 +39,12 @@ export function resolveReport({ now, sessionId = null, snapshotDir: dir, cwd, de
   // 2. Fresh snapshot → collector state.
   if (read && read.fresh) {
     const s = read.snapshot;
+    // `compactions` is intentionally counted at REPORT time, not read from the snapshot:
+    // it is a monotonic tally the report can always obtain current (a boundary count
+    // needs no window to interpret), so unlike context/rate_limits/cost it is never
+    // snapshot-stale. It can therefore be fresher than the other fields — a compaction
+    // landing after capture bumps the count while context still shows the pre-capture
+    // value; only context carries snapshot_age_seconds. This is by design, not drift.
     const compactions = s.transcript_path ? countCompactions(s.transcript_path, deps) : 0;
     let rateLimitsStatus = 'available';
     if (!s.rate_limits) rateLimitsStatus = isProviderModel(s.model?.id, env) ? 'unavailable_provider' : 'unavailable_plan';
