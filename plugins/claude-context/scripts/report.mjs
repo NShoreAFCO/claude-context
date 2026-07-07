@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { readSnapshot, findNewestSnapshot } from './lib/snapshot.mjs';
+import { readSnapshot, listSnapshotsByMtime } from './lib/snapshot.mjs';
 import { snapshotDir, snapshotFileName, resolveSessionId } from './lib/config-dir.mjs';
 import { lastAssistantUsage, countCompactions } from './lib/transcript.mjs';
 import { usedTokens, percentage, headroom } from './lib/token-math.mjs';
@@ -26,8 +26,14 @@ export function resolveReport({ now, sessionId = null, snapshotDir: dir, cwd, de
     if (read) identified = true;
   }
   if (!read && dir) {
-    const newest = findNewestSnapshot(dir, { deps });
-    if (newest) read = readSnapshot(newest, { now, deps });
+    // Try snapshots newest-first, stopping at the first that PARSES (fresh or stale —
+    // both return non-null). A corrupt / cross-version / zero-byte newest file is skipped
+    // so it can't mask a valid older snapshot and wrongly report the user as not set up
+    // (I1). If none parse, `read` stays null → the honest not-set-up state.
+    for (const candidate of listSnapshotsByMtime(dir, { deps })) {
+      read = readSnapshot(candidate, { now, deps });
+      if (read) break;
+    }
   }
 
   // 2. Fresh snapshot → collector state.

@@ -139,6 +139,29 @@ test('no session id (older Claude Code / subagent): falls back to the newest sna
   assert.match(human, /session: unverified/);
 });
 
+test('I1: a corrupt NEWEST snapshot never masks a valid older one — a set-up user is not told to run setup', () => {
+  const dir = tmpDir('corrupt-newest');
+  // The user IS set up: a valid, fresh snapshot exists...
+  writeSnap(dir, 'sess-valid', buildSnapshot({ session_id: 'sess-valid', context_window: { context_window_size: 200000, used_percentage: 37, current_usage: { input_tokens: 74000 } }, transcript_path: null }, NOW), NOW);
+  // ...but a truncated / cross-version half-written file is the NEWEST by mtime.
+  const corrupt = path.join(dir, 'snapshot-corrupt.json');
+  fs.writeFileSync(corrupt, '{ "updated_at": "2026'); // unparseable JSON
+  // Pin both mtimes so ordering is deterministic regardless of the real wall clock.
+  const validSecs = Math.floor(NOW / 1000);
+  fs.utimesSync(path.join(dir, snapshotFileName('sess-valid')), validSecs, validSecs);
+  fs.utimesSync(corrupt, validSecs + 60, validSecs + 60); // corrupt is newest
+
+  // A session with no own keyed snapshot falls to the newest-first scan; the corrupt
+  // newest must be skipped in favor of the valid older one, NOT reported as not-set-up.
+  const res = resolveReport({ now: NOW + 1000, sessionId: 'other', snapshotDir: dir, cwd: '/nonexistent', deps: fs, env: {} });
+  const { json } = assembleReport(res, NOW + 1000);
+  assert.equal(json.setup_required, false);          // not collapsed to not-set-up
+  assert.notEqual(json.source, 'unavailable');
+  assert.equal(json.source, 'collector');
+  assert.equal(json.context.used_percentage, 37);    // recovered from the valid older file
+  assert.equal(json.session_selection, 'unverified-snapshot');
+});
+
 test('cold start (no snapshot ever): resolveReport returns not-set-up without inventing numbers', () => {
   const dir = tmpDir('coldstart'); // empty snapshot dir
   const res = resolveReport({ now: NOW, sessionId: 'nobody', snapshotDir: dir, cwd: '/nonexistent', deps: fs, env: {} });

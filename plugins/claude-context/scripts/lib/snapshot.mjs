@@ -44,22 +44,30 @@ export function writeSnapshot(snapshotPath, snapshot, { now = Date.now(), deps =
   }
 }
 
-// Fallback for when the report can't identify its own session (older Claude Code,
-// or a subagent): the newest snapshot-*.json in the dir. It may belong to another
-// concurrent session, so callers must flag its provenance as unverified.
-export function findNewestSnapshot(dir, { deps = fs } = {}) {
+// All snapshot-*.json files in the dir, newest (highest mtime) first. The report
+// tries them in order so a single corrupt / cross-version / zero-byte NEWEST file
+// doesn't mask a valid older one and collapse an already-set-up user to the
+// not-set-up state (it would falsely tell them to run setup).
+export function listSnapshotsByMtime(dir, { deps = fs } = {}) {
   let files;
-  try { files = deps.readdirSync(dir); } catch { return null; }
-  let newest = null;
-  let newestMtime = -Infinity;
+  try { files = deps.readdirSync(dir); } catch { return []; }
+  const found = [];
   for (const f of files) {
     if (!f.startsWith('snapshot') || !f.endsWith('.json')) continue; // skips dot-prefixed .tmp files
     const full = path.join(dir, f);
     let mtime;
     try { mtime = deps.statSync(full).mtimeMs; } catch { continue; }
-    if (mtime > newestMtime) { newestMtime = mtime; newest = full; }
+    found.push({ full, mtime });
   }
-  return newest;
+  found.sort((a, b) => b.mtime - a.mtime);
+  return found.map((x) => x.full);
+}
+
+// Fallback for when the report can't identify its own session (older Claude Code,
+// or a subagent): the newest snapshot-*.json in the dir. It may belong to another
+// concurrent session, so callers must flag its provenance as unverified.
+export function findNewestSnapshot(dir, { deps = fs } = {}) {
+  return listSnapshotsByMtime(dir, { deps })[0] ?? null;
 }
 
 export function readSnapshot(snapshotPath, { now = Date.now(), freshnessMs = FRESHNESS_MS, deps = fs } = {}) {

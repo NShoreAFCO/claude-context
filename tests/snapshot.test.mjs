@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { writeSnapshot, readSnapshot, findNewestSnapshot, FRESHNESS_MS } from '../plugins/claude-context/scripts/lib/snapshot.mjs';
+import { writeSnapshot, readSnapshot, findNewestSnapshot, listSnapshotsByMtime, FRESHNESS_MS } from '../plugins/claude-context/scripts/lib/snapshot.mjs';
 
 function tmpFile() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-'));
@@ -93,6 +93,31 @@ test('findNewestSnapshot returns the newest snapshot-*.json, ignoring temp and n
   const future = Math.floor(Date.now() / 1000) + 100;
   fs.utimesSync(path.join(dir, 'snapshot-b.json'), future, future); // make b newest
   assert.equal(findNewestSnapshot(dir), path.join(dir, 'snapshot-b.json'));
+});
+
+test('listSnapshotsByMtime returns every snapshot-*.json newest-first, including as-yet-unparsed ones, skipping temp/non-snapshot files', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-list-'));
+  fs.writeFileSync(path.join(dir, 'snapshot-a.json'), '{}');
+  fs.writeFileSync(path.join(dir, 'snapshot-b.json'), '{}');
+  fs.writeFileSync(path.join(dir, 'snapshot-c.json'), '{not json'); // corrupt: still LISTED (parsing is the reader's job)
+  fs.writeFileSync(path.join(dir, '.snapshot-b.json.1.2.tmp'), '{}'); // in-flight temp: ignored
+  fs.writeFileSync(path.join(dir, 'notes.txt'), 'x'); // not a snapshot: ignored
+  const base = Math.floor(Date.now() / 1000);
+  fs.utimesSync(path.join(dir, 'snapshot-b.json'), base + 5, base + 5);
+  fs.utimesSync(path.join(dir, 'snapshot-a.json'), base + 10, base + 10);
+  fs.utimesSync(path.join(dir, 'snapshot-c.json'), base + 20, base + 20); // newest
+  assert.deepEqual(listSnapshotsByMtime(dir), [
+    path.join(dir, 'snapshot-c.json'),
+    path.join(dir, 'snapshot-a.json'),
+    path.join(dir, 'snapshot-b.json'),
+  ]);
+});
+
+test('listSnapshotsByMtime returns [] for a missing or snapshot-free dir', () => {
+  assert.deepEqual(listSnapshotsByMtime('/no/such/dir'), []);
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-list-empty-'));
+  fs.writeFileSync(path.join(empty, 'notes.txt'), 'x');
+  assert.deepEqual(listSnapshotsByMtime(empty), []);
 });
 
 test('findNewestSnapshot returns null for a missing or snapshot-free dir', () => {
