@@ -24,6 +24,6 @@ test('does replace-or-keep, never silent overwrite', () => {
   assert.match(setup, /back\s?up/i);
 });
 
-test('verifies a snapshot after wiring', () => {
-  assert.match(setup, /snapshot\.json/);
+test('verifies a snapshot after wiring (session-keyed glob, not a fixed name)', () => {
+  assert.match(setup, /snapshot-\*\.json/);
 });

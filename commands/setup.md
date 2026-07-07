@@ -165,11 +165,12 @@ Tell the user to fully restart Claude Code.
 
 ## Step 5: Verify a snapshot appears
 
-After the user restarts and sends one message, confirm the snapshot exists:
+After the user restarts and sends one message, confirm a snapshot exists. The
+collector keys the file by session id, so match the glob rather than a fixed name:
 ```bash
-cat "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/claude-context/snapshot.json"
+cat "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/claude-context/snapshot-*.json
 ```
-If it exists and has an `updated_at` within the last few minutes, setup worked.
+If one exists and has an `updated_at` within the last few minutes, setup worked.
 If not, check, in order: the runtime path resolves (`ls -la {RUNTIME_PATH}`); the
 plugin cache glob matches an installed version (`ls "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/claude-context/*/`);
 on Windows, that the `Platform:`/`Shell:` branch matches the actual command
