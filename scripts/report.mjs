@@ -6,7 +6,6 @@ import { readSnapshot, findNewestSnapshot } from './lib/snapshot.mjs';
 import { snapshotDir, snapshotFileName, resolveConfigDir, resolveSessionId } from './lib/config-dir.mjs';
 import { lastAssistantUsage, countCompactions, findNewestTranscript, transcriptForSession } from './lib/transcript.mjs';
 import { usedTokens, percentage, headroom } from './lib/token-math.mjs';
-import { inferWindowSize } from './lib/model-window.mjs';
 import { formatDuration, clockHM } from './lib/time.mjs';
 
 function numOrNull(v) { return typeof v === 'number' && Number.isFinite(v) ? v : null; }
@@ -19,22 +18,19 @@ function isProviderModel(id, env = process.env) {
 }
 
 export function resolveReport({ now, sessionId = null, snapshotDir: dir, cwd, deps = fs, env = process.env }) {
-  // 1. Prefer THIS session's own keyed snapshot — the only one guaranteed to describe
-  //    our context/compactions. `identified` records that we matched it by session id.
+  // 1. Prefer THIS session's own keyed snapshot; else the newest in the dir.
   let read = null;
   let identified = false;
   if (sessionId && dir) {
     read = readSnapshot(path.join(dir, snapshotFileName(sessionId)), { now, deps });
     if (read) identified = true;
   }
-  // 2. Couldn't identify our own snapshot (no session id, or its file is absent): fall
-  //    back to the newest snapshot in the dir. Under concurrent sessions it may belong
-  //    to a different one, so its provenance is flagged 'unverified-snapshot'.
   if (!read && dir) {
     const newest = findNewestSnapshot(dir, { deps });
     if (newest) read = readSnapshot(newest, { now, deps });
   }
 
+  // 2. Fresh snapshot → collector state.
   if (read && read.fresh) {
     const s = read.snapshot;
     const compactions = s.transcript_path ? countCompactions(s.transcript_path, deps) : 0;
@@ -50,63 +46,103 @@ export function resolveReport({ now, sessionId = null, snapshotDir: dir, cwd, de
       compactions,
       sessionSelection: identified ? 'session_id' : 'unverified-snapshot',
       snapshotAgeSeconds: read.ageSeconds,
-      windowInferred: false,
+      setupRequired: false,
     };
   }
 
-  // No fresh snapshot. A stale one still supplies the real window_size and its age,
-  // and downgrades the "collector off" message to "collector idle" (unavailable_stale).
-  const staleSnapshot = read ? read.snapshot : null;
-  const staleAge = read ? read.ageSeconds : null;
+  // 3. NO snapshot has EVER been written → not-set-up. Skip ALL transcript I/O: the
+  //    compaction count is unknown (null, not 0), and no window is ever inferred.
+  if (!read) {
+    return {
+      source: 'unavailable',
+      model: {},
+      context: null,
+      rateLimits: null,
+      rateLimitsStatus: 'unavailable_collector',
+      cost: null,
+      compactions: null,
+      sessionSelection: null,
+      snapshotAgeSeconds: null,
+      setupRequired: true,
+    };
+  }
+
+  // 4. A snapshot exists but is STALE (collector idle). It still carries the real
+  //    window size and its age; we must never tell an already-set-up user to run setup.
+  const staleSnapshot = read.snapshot;
+  const staleAge = read.ageSeconds;
   const knownWindow = numOrNull(staleSnapshot?.context?.window_size);
-  const fallbackStatus = read ? 'unavailable_stale' : 'unavailable_collector';
 
   const configDir = resolveConfigDir(env);
-  // Prefer our OWN transcript (deterministic from the session id) over the cwd heuristic,
-  // which can't distinguish two sessions sharing a directory.
+  // Prefer our OWN transcript (deterministic from the session id) over the cwd heuristic.
   let transcript = sessionId ? transcriptForSession(configDir, cwd, sessionId, deps) : null;
   let transcriptSelection = transcript ? 'session_id' : null;
   if (!transcript) {
     transcript = findNewestTranscript(configDir, cwd, deps);
     if (transcript) transcriptSelection = 'newest-in-cwd-heuristic';
   }
-  const usage = transcript ? lastAssistantUsage(transcript, deps) : null;
   const compactions = transcript ? countCompactions(transcript, deps) : 0;
 
+  // Read the transcript's latest usage ONLY when the snapshot supplied a real window
+  // to size it against (§2.1). Without a real window we never infer — we fall back to
+  // the snapshot's own context field below.
+  const usage = knownWindow > 0 && transcript ? lastAssistantUsage(transcript, deps) : null;
+
   if (usage) {
-    // Reuse the snapshot's real window_size when we have one; only guess at true cold start.
-    const windowInferred = !(knownWindow && knownWindow > 0);
-    const windowSize = windowInferred ? inferWindowSize({ id: usage.model_id }) : knownWindow;
     const used = usedTokens(usage);
     return {
       source: 'transcript',
       model: { id: usage.model_id ?? '', display_name: '' },
       context: {
-        window_size: windowSize,
+        window_size: knownWindow,
         used_tokens: used,
-        used_percentage: percentage(used, windowSize),
+        used_percentage: percentage(used, knownWindow),
         input_tokens: usage.input_tokens,
         cache_read_tokens: usage.cache_read_input_tokens,
         cache_creation_tokens: usage.cache_creation_input_tokens,
         output_tokens: usage.output_tokens,
       },
       rateLimits: null,
-      rateLimitsStatus: fallbackStatus,
+      rateLimitsStatus: 'unavailable_stale',
       cost: null,
       compactions,
       sessionSelection: transcriptSelection,
       snapshotAgeSeconds: staleAge,
-      windowInferred,
+      setupRequired: false,
     };
   }
 
+  // Transcript yielded no usage: fall back to the stale snapshot's OWN context field
+  // (it already carries the real window). Provenance is `collector` — the numbers come
+  // from the snapshot — distinguished from a live reading only by unavailable_stale +
+  // the reported age. Attribute the session to the snapshot's own identification, since
+  // the context is snapshot-derived (matches the fresh-collector state's semantics).
   return {
-    source: 'unavailable', model: staleSnapshot?.model ?? {}, context: null, rateLimits: null,
-    rateLimitsStatus: fallbackStatus, cost: null, compactions,
-    sessionSelection: transcriptSelection,
-    snapshotAgeSeconds: staleAge, windowInferred: false,
+    source: 'collector',
+    model: staleSnapshot?.model ?? {},
+    context: staleSnapshot?.context ?? null,
+    rateLimits: null,
+    rateLimitsStatus: 'unavailable_stale',
+    cost: null,
+    compactions,
+    sessionSelection: identified ? 'session_id' : 'unverified-snapshot',
+    snapshotAgeSeconds: staleAge,
+    setupRequired: false,
   };
 }
+
+const COLD_START_HUMAN = `Claude Context — collector not configured
+
+No resource facts are available for this session yet: the usage collector
+has not recorded a snapshot, so there is nothing to measure.
+
+To enable reporting — context %, 5-hour / 7-day usage, session cost, and
+compaction count — run:
+
+    /claude-context:setup
+
+That wires a statusline helper which captures the figures Claude Code sends
+only to the statusline. Once it has run, this report returns live numbers.`;
 
 function modelName(model) {
   return model?.display_name || model?.id || 'unknown';
@@ -163,7 +199,7 @@ function buildJson(r, now) {
     compactions: r.compactions,
     source: r.source,
     rate_limits_status: r.rateLimitsStatus,
-    window_size_inferred: !!r.windowInferred,
+    setup_required: !!r.setupRequired,
     snapshot_age_seconds: r.snapshotAgeSeconds,
     generated_at: new Date(now).toISOString(),
   };
@@ -206,27 +242,24 @@ function sessionNote(r) {
 }
 
 function sourceLine(r) {
-  if (r.source === 'collector') return `Source: collector · snapshot ${r.snapshotAgeSeconds}s old${sessionNote(r)}`;
+  if (r.source === 'collector') {
+    const stale = r.rateLimitsStatus === 'unavailable_stale' ? ' (stale)' : '';
+    return `Source: collector · snapshot ${r.snapshotAgeSeconds}s old${stale}${sessionNote(r)}`;
+  }
   if (r.source === 'transcript') {
-    const win = r.windowInferred ? 'window inferred' : 'window from snapshot';
     const age = r.snapshotAgeSeconds != null ? ` · snapshot ${r.snapshotAgeSeconds}s old (stale)` : '';
     const sess = r.sessionSelection === 'session_id' ? 'this session' : 'newest-in-cwd (heuristic)';
-    return `Source: transcript fallback · context only · ${win}${age} · session: ${sess}`;
+    return `Source: transcript fallback · context only · window from snapshot${age} · session: ${sess}`;
   }
   return 'Source: unavailable';
 }
 
 function buildHuman(r, now) {
+  if (r.setupRequired) return COLD_START_HUMAN;
   const lines = [`Claude Context — ${modelName(r.model)}`];
   const c = r.context;
   if (c && c.used_percentage == null) {
-    // Context present but the window size hasn't been reported yet (native window_size 0
-    // on a new session's first statusline ping), so %/headroom are undefined. Don't
-    // render a literal "null%" or a misleading "0 / 0 tokens · — headroom" tail.
     lines.push('Context: unavailable — window size not reported yet');
-  } else if (c && r.windowInferred) {
-    // Cold-start fallback: window size is a guess, so hedge the % and drop headroom.
-    lines.push(`Context: ~${c.used_percentage}% used · ${kt(c.used_tokens)} tokens · window inferred (${kt(c.window_size)} assumed)`);
   } else if (c) {
     lines.push(`Context: ${c.used_percentage}% used · ${kt(c.used_tokens)} / ${kt(c.window_size)} tokens · ${kt(headroom(c.used_tokens, c.window_size))} headroom`);
   } else {

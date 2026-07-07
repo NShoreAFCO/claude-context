@@ -101,3 +101,27 @@ test('no session id (older Claude Code / subagent): falls back to the newest sna
   assert.equal(json.session_selection, 'unverified-snapshot');
   assert.match(human, /session: unverified/);
 });
+
+test('cold start (no snapshot ever): resolveReport returns not-set-up without inventing numbers', () => {
+  const dir = tmpDir('coldstart'); // empty snapshot dir
+  const res = resolveReport({ now: NOW, sessionId: 'nobody', snapshotDir: dir, cwd: '/nonexistent', deps: fs, env: {} });
+  const { json } = assembleReport(res, NOW);
+  assert.equal(json.source, 'unavailable');
+  assert.equal(json.setup_required, true);
+  assert.equal(json.rate_limits_status, 'unavailable_collector');
+  assert.equal(json.compactions, null);       // transcript I/O skipped entirely
+  assert.equal(json.context.window_size, null); // no window ever inferred
+});
+
+test('stale snapshot, no transcript: resolveReport falls back to the snapshot context as source collector', () => {
+  const dir = tmpDir('stale');
+  const past = NOW - 10 * 60 * 1000; // 10 min before "now" → past the 5-min freshness window
+  writeSnap(dir, 'sid-stale', buildSnapshot(stdin, past), past);
+  const res = resolveReport({ now: NOW, sessionId: 'sid-stale', snapshotDir: dir, cwd: '/nonexistent', deps: fs, env: {} });
+  const { json } = assembleReport(res, NOW);
+  assert.equal(json.source, 'collector');
+  assert.equal(json.rate_limits_status, 'unavailable_stale');
+  assert.equal(json.context.window_size, 200000); // real window from the snapshot, not inferred
+  assert.equal(json.context.used_percentage, 46);  // accurate against the real window
+  assert.equal(json.setup_required, false);
+});

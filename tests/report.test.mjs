@@ -33,6 +33,8 @@ test('collector JSON block is pure measurements + provenance', () => {
   assert.equal(json.rate_limits_status, 'available');
   assert.equal(json.session_selection, 'session_id');
   assert.equal('suggested_action' in json, false);
+  assert.equal(json.setup_required, false);
+  assert.equal('window_size_inferred' in json, false);
 });
 
 test('collector human block matches the contract', () => {
@@ -81,40 +83,41 @@ test('collector available but a window is missing → factual copy, never "enabl
 });
 
 test('stale snapshot → unavailable_stale keeps the age and never tells the user to run setup', () => {
-  const res = { ...collectorRes, source: 'transcript', rateLimits: null, rateLimitsStatus: 'unavailable_stale', snapshotAgeSeconds: 420, sessionSelection: 'newest-in-cwd-heuristic', windowInferred: false };
+  const res = { ...collectorRes, source: 'transcript', rateLimits: null, rateLimitsStatus: 'unavailable_stale', snapshotAgeSeconds: 420, sessionSelection: 'newest-in-cwd-heuristic' };
   const { human, json } = assembleReport(res, NOW);
   assert.match(human, /^Session \(5h\): unavailable — last collector reading 420s ago \(idle; send a message to refresh\)$/m);
   assert.doesNotMatch(human, /\/claude-context:setup/);
   assert.match(human, /^Source: transcript fallback · context only · window from snapshot · snapshot 420s old \(stale\) · session: newest-in-cwd \(heuristic\)$/m);
   assert.equal(json.rate_limits_status, 'unavailable_stale');
-  assert.equal(json.window_size_inferred, false);
 });
 
-test('transcript fallback (no snapshot ever): inferred window, hedged %, context only', () => {
+test('stale snapshot, no transcript usage: reports the snapshot context as source collector, flagged stale', () => {
   const res = {
-    source: 'transcript', model: { id: 'claude-opus-4-8', display_name: '' },
-    context: { window_size: 200000, used_tokens: 92000, used_percentage: 46, input_tokens: 1200, cache_read_tokens: 88000, cache_creation_tokens: 2800, output_tokens: 0 },
-    rateLimits: null, rateLimitsStatus: 'unavailable_collector', cost: null, compactions: 1,
-    sessionSelection: 'newest-in-cwd-heuristic', snapshotAgeSeconds: null, windowInferred: true,
+    source: 'collector',
+    model: { id: 'claude-opus-4-8', display_name: 'Opus 4.8' },
+    context: { window_size: 1000000, used_tokens: 50000, used_percentage: 5, input_tokens: 1000, cache_read_tokens: 47000, cache_creation_tokens: 2000, output_tokens: 0 },
+    rateLimits: null, rateLimitsStatus: 'unavailable_stale', cost: null, compactions: 2,
+    sessionSelection: 'session_id', snapshotAgeSeconds: 600, setupRequired: false,
   };
   const { human, json } = assembleReport(res, NOW);
-  assert.match(human, /^Context: ~46% used · 92k tokens · window inferred \(200k assumed\)$/m);
-  assert.match(human, /^Session \(5h\): unavailable — enable the collector with \/claude-context:setup$/m);
-  assert.match(human, /^Source: transcript fallback · context only · window inferred · session: newest-in-cwd \(heuristic\)$/m);
-  assert.equal(json.cost_usd, null);
-  assert.equal(json.window_size_inferred, true);
-  assert.equal(json.session_selection, 'newest-in-cwd-heuristic');
+  assert.equal(json.source, 'collector');
+  assert.equal(json.rate_limits_status, 'unavailable_stale');
+  assert.equal(json.context.used_percentage, 5);   // accurate against the real 1M window
+  assert.equal(json.setup_required, false);
+  assert.match(human, /^Source: collector · snapshot 600s old \(stale\)$/m); // stale-marked, not "fresh"
+  assert.match(human, /^Session \(5h\): unavailable — last collector reading 600s ago \(idle; send a message to refresh\)$/m);
+  assert.doesNotMatch(human, /\/claude-context:setup/); // already set up — never tell them to run setup
 });
 
 test('collector snapshot with an unpopulated window (0) renders "unavailable", never a literal null%', () => {
-  // First statusline ping of a brand-new session: window_size 0 → percentage() is null
-  // and windowInferred is false, so the numeric branch would interpolate a literal null%.
+  // First statusline ping of a brand-new session: window_size 0 → percentage() is null,
+  // so the numeric branch would interpolate a literal null% if not guarded.
   const res = {
     source: 'collector',
     model: { id: 'claude-opus-4-8', display_name: 'Opus 4.8' },
     context: { window_size: 0, used_tokens: 0, used_percentage: null, input_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0, output_tokens: 0 },
     rateLimits: null, rateLimitsStatus: 'unavailable_plan', cost: null, compactions: 0,
-    sessionSelection: 'session_id', snapshotAgeSeconds: 0, windowInferred: false,
+    sessionSelection: 'session_id', snapshotAgeSeconds: 0,
   };
   const { human, json } = assembleReport(res, NOW);
   assert.doesNotMatch(human, /null%/);
@@ -122,35 +125,44 @@ test('collector snapshot with an unpopulated window (0) renders "unavailable", n
   assert.equal(json.context.used_percentage, null); // JSON still reports the raw measurement
 });
 
-test('cold start: null context, no crash', () => {
+test('not set up (no snapshot ever): cold-start block + all-null JSON + setup_required + compactions null', () => {
   const res = {
     source: 'unavailable', model: {}, context: null, rateLimits: null,
-    rateLimitsStatus: 'unavailable_collector', cost: null, compactions: 0,
-    sessionSelection: null, snapshotAgeSeconds: null,
+    rateLimitsStatus: 'unavailable_collector', cost: null, compactions: null,
+    sessionSelection: null, snapshotAgeSeconds: null, setupRequired: true,
   };
   const { human, json } = assembleReport(res, NOW);
-  assert.match(human, /^Context: unavailable — no measurement yet/m);
-  assert.match(human, /^Source: unavailable$/m);
+  // Human: the configure-the-tool block, and NO Context:/Source: lines.
+  assert.match(human, /^Claude Context — collector not configured$/m);
+  assert.match(human, /\/claude-context:setup/);
+  assert.match(human, /Once it has run, this report returns live numbers\.$/m);
+  assert.doesNotMatch(human, /^Context:/m);
+  assert.doesNotMatch(human, /^Source:/m);
+  // JSON: all-null payload plus provenance.
+  assert.equal(json.source, 'unavailable');
+  assert.equal(json.rate_limits_status, 'unavailable_collector');
+  assert.equal(json.setup_required, true);
+  assert.equal(json.compactions, null);
   assert.equal(json.context.used_percentage, null);
+  assert.equal(json.context.window_size, null);
+  assert.equal(json.rate_limits.five_hour, null);
+  assert.equal(json.cost_usd, null);
   assert.equal('session_selection' in json, false);
+  assert.equal('window_size_inferred' in json, false); // field removed entirely (§3)
 });
 
 test('no-advice contract: rendered output carries no advice/level vocabulary in any state', () => {
   const forbidden = [/should compact/i, /recommend/i, /\byou should\b/i, /traffic.light/i, /\bpressure\b/i, /\b(70|85|90)%/];
-  const staleRes = { ...collectorRes, source: 'transcript', rateLimits: null, rateLimitsStatus: 'unavailable_stale', snapshotAgeSeconds: 420, sessionSelection: 'newest-in-cwd-heuristic', windowInferred: false };
-  const coldRes = { source: 'unavailable', model: {}, context: null, rateLimits: null, rateLimitsStatus: 'unavailable_collector', cost: null, compactions: 0, sessionSelection: null, snapshotAgeSeconds: null };
+  const staleTranscriptRes = { ...collectorRes, source: 'transcript', rateLimits: null, rateLimitsStatus: 'unavailable_stale', snapshotAgeSeconds: 420, sessionSelection: 'newest-in-cwd-heuristic', setupRequired: false };
+  const staleSnapshotRes = { ...collectorRes, source: 'collector', rateLimits: null, rateLimitsStatus: 'unavailable_stale', snapshotAgeSeconds: 600, setupRequired: false };
+  const notSetUpRes = { source: 'unavailable', model: {}, context: null, rateLimits: null, rateLimitsStatus: 'unavailable_collector', cost: null, compactions: null, sessionSelection: null, snapshotAgeSeconds: null, setupRequired: true };
   const planRes = { ...collectorRes, rateLimits: null, rateLimitsStatus: 'unavailable_plan' };
   const providerRes = { ...collectorRes, rateLimits: null, rateLimitsStatus: 'unavailable_provider' };
-  const transcriptInferredRes = {
-    source: 'transcript', model: { id: 'claude-opus-4-8', display_name: '' },
-    context: { window_size: 200000, used_tokens: 92000, used_percentage: 46, input_tokens: 1200, cache_read_tokens: 88000, cache_creation_tokens: 2800, output_tokens: 0 },
-    rateLimits: null, rateLimitsStatus: 'unavailable_collector', cost: null, compactions: 1,
-    sessionSelection: 'newest-in-cwd-heuristic', snapshotAgeSeconds: null, windowInferred: true,
-  };
-  for (const res of [collectorRes, staleRes, coldRes, planRes, providerRes, transcriptInferredRes]) {
+  for (const res of [collectorRes, staleTranscriptRes, staleSnapshotRes, notSetUpRes, planRes, providerRes]) {
     const { human, json } = assembleReport(res, NOW);
     const blob = `${human}\n${JSON.stringify(json)}`;
     for (const re of forbidden) assert.doesNotMatch(blob, re);
     assert.equal('suggested_action' in json, false);
+    assert.equal(typeof json.setup_required, 'boolean'); // always present, always boolean
   }
 });
