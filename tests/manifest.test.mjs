@@ -1,0 +1,24 @@
+// tests/manifest.test.mjs
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+
+const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const readJson = (rel) => JSON.parse(readFileSync(path.join(root, rel), 'utf8'));
+
+test('plugin.json has required fields', () => {
+  const m = readJson('.claude-plugin/plugin.json');
+  assert.equal(m.name, 'claude-context');
+  assert.match(m.version, /^\d+\.\d+\.\d+$/);
+  assert.ok(m.commands.includes('./commands/setup.md'));
+  assert.equal(m.skills, undefined, 'no skills field so root SKILL.md auto-loads');
+});
+
+test('marketplace.json points at this plugin', () => {
+  const m = readJson('.claude-plugin/marketplace.json');
+  assert.equal(m.name, 'claude-context');
+  assert.equal(m.plugins[0].name, 'claude-context');
+  assert.equal(m.plugins[0].source, './');
+});

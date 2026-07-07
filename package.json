@@ -1,0 +1,10 @@
+{
+  "name": "claude-context",
+  "version": "0.1.0",
+  "description": "On-demand session resource facts for Claude Code — pure measurements, no advice.",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=18" },
+  "scripts": { "test": "node --test" }
+}
