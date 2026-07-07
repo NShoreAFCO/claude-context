@@ -61,6 +61,12 @@ test('collector -> report seam: resolveReport reads a real buildSnapshot() outpu
   assert.equal(json.context.cache_creation_tokens, 2800);
   assert.equal(json.context.used_tokens, 1200 + 88000 + 2800);
   assert.equal(json.rate_limits.five_hour.used_percentage, 25);
+  // Seams every other test skips (all cost assertions elsewhere use hand-built
+  // resolutions): a rename in any of these would ship null/— with the suite green.
+  assert.equal(json.cost_usd, 0.42);                              // snapshot.cost.total_cost_usd -> json.cost_usd
+  assert.equal(json.rate_limits.seven_day.used_percentage, 61);  // the second window round-trips too
+  assert.equal(json.context.used_percentage, 46);                // native used_percentage passthrough
+  assert.equal(json.context.headroom_tokens, 200000 - (1200 + 88000 + 2800)); // derived from round-tripped fields
   assert.match(human, /^Source: collector/m);
 });
 
