@@ -14,7 +14,7 @@ actions. What to do with the numbers is entirely the caller's decision.
 **When relaying this report, pass the measurements through as-is.** Do not add
 recommendations, urgency, thresholds, or "you should…" framing of your own — even
 though the numbers may invite it. Report what the instrument measured and the
-provenance fields (`source`, `rate_limits_status`, `window_size_inferred`,
+provenance fields (`source`, `rate_limits_status`, `setup_required`,
 `session_selection`); let the caller decide what it means.
 
 ## How to run it
@@ -45,14 +45,22 @@ block, and always succeeds even with no collector running.
   Pro/Max accounts after the first API response; otherwise `null`.
 - **cost_usd** — session cost in USD, or `null` when unavailable.
 - **compactions** — number of compaction boundaries in the transcript.
-- **source** — `collector` (from the statusline snapshot), `transcript`
-  (context-only fallback), or `unavailable` (no measurement yet).
+- **source** — `collector` (a fresh snapshot, or — while idle — the stale
+  snapshot's own context field), `transcript` (collector idle: context
+  recomputed from the transcript against the stale snapshot's real window
+  size), or `unavailable` (no snapshot has ever been written; `compactions` is
+  also `null` in this state, since it is unknown rather than zero).
 - **rate_limits_status** — `available`; `unavailable_plan` (collector on, account
   reports no subscription usage — either an API-key account or before the first
   Pro/Max response); `unavailable_provider` (Bedrock/Vertex, which don't report
   subscription usage); `unavailable_stale` (a snapshot exists but is past the
   freshness window — collector on but idle); or `unavailable_collector` (no
   snapshot has ever been written).
+- **setup_required** — `true` only when no collector snapshot has ever been
+  written (the not-set-up state): 5h/7d, cost, context, and compactions are all
+  `null` and the human block explains how to run `/claude-context:setup`. `false`
+  in every other state. Gate on this one field instead of inferring setup status
+  from `source`/`rate_limits_status`.
 - **session_selection** — how the report decided whose numbers these are:
   `session_id` (matched this session's own id — the snapshot/transcript is
   definitively yours); `unverified-snapshot` (this Claude Code build exposed no
@@ -62,9 +70,6 @@ block, and always succeeds even with no collector running.
   when it matters that the context figures are your session's and not a neighbor's.
 - **snapshot_age_seconds** — how old the snapshot is (collector mode, or the age
   of a stale snapshot reused in fallback).
-- **window_size_inferred** — `true` only when the report had no snapshot to read
-  the real context-window size from and had to guess it from the model id (a 1M
-  session can't be detected this way); the `%` on that line is approximate.
 - **model** — the reporting session's model as `{ id, display_name }`. From the
   collector, `id` carries the `[1m]` marker on a 1M-context session; from the
   transcript fallback it is the base id (no marker) and `display_name` is empty.
@@ -92,11 +97,25 @@ your own subagent context, which this report does not measure.
 
 ## Sources and reliability
 
-Live 5h/7d usage and cost require the opt-in collector, wired with
-`/claude-context:setup`. Without it — or when the collector is on but idle and its
-snapshot has gone stale — `/claude-context:claude-context` still reports context
-health from the transcript (`source: "transcript"`), and 5h/7d/cost are `null`. A
-stale snapshot is reported distinctly (`rate_limits_status: "unavailable_stale"`)
-and still supplies the real window size, so it is never mistaken for "collector not
-installed." Use the `source`, `rate_limits_status`, `window_size_inferred`, and
-`session_selection` fields to judge how much to trust each number.
+The report resolves to exactly three states, keyed on whether a collector snapshot
+has ever been written:
+
+- **Collector** — a fresh snapshot exists. Full numbers: context, 5h/7d usage, cost,
+  and compactions, all `source: "collector"`, `rate_limits_status: "available"` (or
+  one of the `unavailable_plan` / `unavailable_provider` variants when the account
+  doesn't report subscription usage).
+- **Collector idle** — a snapshot exists but is past the freshness window. Context is
+  still accurate: recomputed from the transcript's latest usage against the stale
+  snapshot's real window size (`source: "transcript"`), or, when the transcript has
+  no usage to read, reported straight from the stale snapshot's own context field
+  (`source: "collector"`). Either way `rate_limits_status: "unavailable_stale"` and
+  5h/7d/cost are `null` — the collector is on, just not fresh, so it is never
+  mistaken for "collector not installed."
+- **Not set up** — no snapshot has ever been written. The report performs no
+  transcript I/O and returns everything `null` (including `compactions`, which is
+  unknown rather than zero), `source: "unavailable"`,
+  `rate_limits_status: "unavailable_collector"`, and `setup_required: true`; the
+  human block explains how to run `/claude-context:setup`.
+
+Use the `source`, `rate_limits_status`, `setup_required`, and `session_selection`
+fields to judge how much to trust each number.

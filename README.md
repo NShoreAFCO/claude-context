@@ -54,7 +54,7 @@ tool that hard-coded its own thresholds would just fight the ones you wrote.
 
 ```
 /plugin marketplace add Ovid/claude-context
-/plugin install claude-context
+/plugin install claude-context@claude-context
 ```
 
 Then any agent — or you — can ask:
@@ -63,9 +63,10 @@ Then any agent — or you — can ask:
 /claude-context:claude-context
 ```
 
-It works immediately, reading context health straight from the session transcript.
-It returns a short human summary **and** a machine-readable JSON block, so an agent
-can parse its own resource state directly:
+Reporting requires the one-time `/claude-context:setup` (see below). Before that's
+been run, the report itself explains how to enable it rather than guessing at
+numbers it doesn't have. Once set up, it returns a short human summary **and** a
+machine-readable JSON block, so an agent can parse its own resource state directly:
 
 ```
 Claude Context — Opus 4.8 (1M context)
@@ -78,8 +79,8 @@ Source: collector · snapshot 3s old
 
 ## Turn on live usage and cost
 
-Context health works out of the box. To also read live **5-hour / 7-day usage and
-session cost**, enable the optional collector once:
+Every number in the report — context health included — comes from the collector, so
+enable it once:
 
 ```
 /claude-context:setup
@@ -94,10 +95,11 @@ and asks before changing anything — it never silently replaces your setup. (Li
 
 An agent making decisions needs to know when a reading is solid and when it's a
 fallback. So every report carries its own provenance: where each number came from
-(`source`), whether subscription usage is actually available, whether the reading is
-stale, and whether any value had to be estimated (`window_size_inferred`). A missing
-or stale figure is labeled as such — never dressed up as a live one — so your rules
-never fire on a number that isn't real.
+(`source`), whether subscription usage is actually available (`rate_limits_status`),
+whether the collector has ever been set up (`setup_required`), and whose session the
+numbers belong to (`session_selection`). A missing or stale figure is labeled as
+such — never dressed up as a live one — so your rules never fire on a number that
+isn't real.
 
 ## Whose numbers are these?
 
