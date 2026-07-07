@@ -183,6 +183,11 @@ function rlLine(label, r, w, now) {
     }
     return `${label}: ${w.used_percentage}% used${when}`;
   }
+  // Status is available but THIS window wasn't reported (null window, or a window with
+  // no used_percentage). The collector is running, so don't tell the user to enable it.
+  if (r.rateLimitsStatus === 'available') {
+    return `${label}: unavailable — not reported for this window`;
+  }
   switch (r.rateLimitsStatus) {
     case 'unavailable_plan':
       return `${label}: unavailable — no subscription usage reported (API-key account, or before the first Pro/Max response)`;

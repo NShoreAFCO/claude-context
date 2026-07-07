@@ -61,6 +61,25 @@ test('collector-on, Bedrock/Vertex → unavailable_provider', () => {
   assert.equal(json.rate_limits_status, 'unavailable_provider');
 });
 
+test('collector available but a window is missing → factual copy, never "enable the collector"', () => {
+  // buildRateLimits returns a non-null block if EITHER window is present, and a window
+  // survives with used_percentage:null when only resets_at is valid. The render must
+  // tolerate both without telling the user to enable an already-running collector.
+  const res = {
+    ...collectorRes,
+    rateLimits: {
+      five_hour: { used_percentage: null, resets_at: '2026-07-07T14:30:00.000Z' }, // present, no %
+      seven_day: null,                                                             // absent entirely
+    },
+    rateLimitsStatus: 'available',
+  };
+  const { human, json } = assembleReport(res, NOW);
+  assert.match(human, /^Session \(5h\): unavailable — not reported for this window$/m);
+  assert.match(human, /^Weekly \(7d\): unavailable — not reported for this window$/m);
+  assert.doesNotMatch(human, /\/claude-context:setup/); // collector is on; never say to enable it
+  assert.equal(json.rate_limits_status, 'available');
+});
+
 test('stale snapshot → unavailable_stale keeps the age and never tells the user to run setup', () => {
   const res = { ...collectorRes, source: 'transcript', rateLimits: null, rateLimitsStatus: 'unavailable_stale', snapshotAgeSeconds: 420, sessionSelection: 'newest-in-cwd-heuristic', windowInferred: false };
   const { human, json } = assembleReport(res, NOW);
