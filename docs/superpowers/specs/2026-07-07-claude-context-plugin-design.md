@@ -28,6 +28,25 @@ This repository (`claude-context`) *is* the installable plugin. The bundled
 `claude-hud/` directory is retained as **reference only** and is not a shipped
 plugin component.
 
+### 1.1 Scope of measurement: whose numbers?
+
+The figures describe the **session**, not an individual agent within it:
+
+- **Context window** is the **main session's** occupancy — the view Claude Code
+  pushes to the statusline (§2). A subagent that invokes the skill therefore reads
+  the *session's* context, **not its own** private context window: a subagent has no
+  statusline stdin, and the transcript fallback's newest-in-cwd heuristic cannot
+  reliably isolate a single subagent's turns (see the `session_selection`
+  provenance field).
+- **Subscription usage (5h/7d)** and **cost** are **account-level** and shared by
+  the main agent and every subagent alike.
+
+This is deliberate and matches the primary use case: a subagent checking whether the
+**parent** session is approaching auto-compaction — so it can checkpoint results
+before guidance is lost — wants the session's context, not its own. Reporting a
+subagent's *private* context is a **non-goal** (§9): the levers to do it reliably do
+not exist, and the session-scoped reading is the more useful signal anyway.
+
 ## 2. Background: the core constraint
 
 Claude Code delivers session telemetry to different consumers differently:

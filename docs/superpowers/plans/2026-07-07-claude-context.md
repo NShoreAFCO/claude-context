@@ -1411,6 +1411,12 @@ test('states the data-only contract and tells the caller not to editorialize', (
   // to describe what the caller must NOT add, so grepping the doc for that
   // vocabulary would false-positive on the contract's own statement.
 });
+
+test('documents whose numbers these are (session context vs account usage)', () => {
+  assert.match(skill, /account-wide/i);
+  assert.match(skill, /\bsession\b/i);
+  assert.match(skill, /\bsubagent\b/i);
+});
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1480,6 +1486,17 @@ even with no collector running.
   the real context-window size from and had to guess it from the model id (a 1M
   session can't be detected this way); the `%` on that line is approximate.
 
+## Whose numbers are these?
+
+The **context** figures describe the **session** — the main agent's context window
+(the view Claude Code sends to the statusline). Subscription **usage (5h/7d)** and
+**cost** are **account-wide**, shared by the main agent and every subagent.
+
+If you are a subagent, the context percentage is the **session's**, not your own
+private window. Use it to judge whether the parent session is filling up — for
+example, to checkpoint results to a file before it auto-compacts — not as a gauge of
+your own subagent context, which this report does not measure.
+
 ## Sources and reliability
 
 Live 5h/7d usage and cost require the opt-in collector, wired with
@@ -1495,7 +1512,7 @@ installed." Use the `source`, `rate_limits_status`, `window_size_inferred`, and
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `node --test tests/skill.test.mjs`
-Expected: PASS (3 tests).
+Expected: PASS (4 tests).
 
 - [ ] **Step 5: Commit**
 

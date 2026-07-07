@@ -99,6 +99,18 @@ stale, and whether any value had to be estimated (`window_size_inferred`). A mis
 or stale figure is labeled as such — never dressed up as a live one — so your rules
 never fire on a number that isn't real.
 
+## Whose numbers are these?
+
+The **context** reading is the *session's* — the main agent's context window (what
+Claude Code's statusline sees). Subscription **usage (5h/7d)** and **cost** are
+*account-wide*, shared across the main agent and every subagent.
+
+So when a subagent asks, it reads the **session's** context, not a private window of
+its own. That's usually the signal you want: a subagent can tell whether the
+**parent** session is nearing auto-compaction and checkpoint its findings before
+that guidance is lost. It is **not** a per-subagent context gauge — a subagent
+cannot read its own private context this way.
+
 ## Credits
 
 `claude-context` adapts battle-tested statusline and transcript-parsing code from
