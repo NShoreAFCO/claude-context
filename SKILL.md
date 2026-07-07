@@ -65,6 +65,12 @@ block, and always succeeds even with no collector running.
 - **window_size_inferred** — `true` only when the report had no snapshot to read
   the real context-window size from and had to guess it from the model id (a 1M
   session can't be detected this way); the `%` on that line is approximate.
+- **model** — the reporting session's model as `{ id, display_name }`. From the
+  collector, `id` carries the `[1m]` marker on a 1M-context session; from the
+  transcript fallback it is the base id (no marker) and `display_name` is empty.
+- **generated_at** — ISO-8601 time the report itself was produced. Distinct from
+  `snapshot_age_seconds` (the snapshot's age): use `generated_at` to tell how fresh
+  the *report* is, e.g. to ignore a cached copy.
 
 ## Whose numbers are these?
 
