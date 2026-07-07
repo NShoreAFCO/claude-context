@@ -17,7 +17,7 @@ function isProviderModel(id, env = process.env) {
   return env?.CLAUDE_CODE_USE_BEDROCK === '1' || env?.CLAUDE_CODE_USE_VERTEX === '1';
 }
 
-export function resolveReport({ now, sessionId = null, snapshotDir: dir, cwd, deps = fs, env = process.env }) {
+export function resolveReport({ now, sessionId = null, snapshotDir: dir, deps = fs, env = process.env }) {
   // 1. Prefer THIS session's own keyed snapshot; else the newest in the dir.
   let read = null;
   let identified = false;
@@ -297,7 +297,7 @@ if (isMain) {
   const now = Date.now();
   const sessionId = resolveSessionId({ argv: process.argv, env: process.env });
   const resolution = resolveReport({
-    now, sessionId, snapshotDir: snapshotDir(process.env), cwd: process.cwd(), deps: fs, env: process.env,
+    now, sessionId, snapshotDir: snapshotDir(process.env), deps: fs, env: process.env,
   });
   const { human, json } = assembleReport(resolution, now);
   process.stdout.write(`${human}\n\n`);
