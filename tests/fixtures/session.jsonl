@@ -1,0 +1,6 @@
+{"type":"user","message":{"role":"user","content":"hi"}}
+{"type":"assistant","message":{"role":"assistant","model":"claude-opus-4-8","usage":{"input_tokens":1000,"cache_read_input_tokens":40000,"cache_creation_input_tokens":1000,"output_tokens":200}}}
+{"type":"system","subtype":"compact_boundary","timestamp":"2026-07-07T12:00:00.000Z"}
+{"type":"assistant","message":{"role":"assistant","model":"claude-opus-4-8","usage":{"input_tokens":1200,"cache_read_input_tokens":88000,"cache_creation_input_tokens":2800,"output_tokens":0}}}
+{"broken json line
+{"type":"system","subtype":"compact_boundary"}
