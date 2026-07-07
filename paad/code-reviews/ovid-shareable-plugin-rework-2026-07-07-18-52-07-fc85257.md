@@ -103,10 +103,13 @@ Each finding was verified against the code before acting. All 70 tests pass (was
 - **[S2] DOCUMENTED** — `compactions` being report-current is intentional (a monotonic
   count the report can always obtain without a window). Documented in-code as the
   reviewer's own suggested resolution. *Commit: note compactions is report-current.*
-- **[S1] DEFERRED (design decision)** — A persistent write failure being indistinguishable
-  from a throttled no-op is real, but no clean fix fits the architecture without a product
-  decision: the collector is a fresh process per ~300ms tick (no in-process state for a
-  "one-time" diagnostic), any durable marker needs the writable FS that is failing, and
-  statusline stderr visibility is unspecified. The only reliable discovery channel is the
-  statusline line itself — which is a user-facing/UX change and touches the "facts, not
-  advice" contract. Raised with the maintainer rather than shipping a speculative half-fix.
+- **[S1] FIXED (maintainer chose the statusline-marker option)** — After surfacing the
+  design trade-off (the collector is a fresh process per ~300ms tick, any durable marker
+  needs the writable FS that is failing, and stderr visibility is unspecified), the
+  maintainer chose the visible statusline channel. `runCli` now checks whether a snapshot
+  was actually persisted at the keyed path after the write; if not — the exact condition
+  that leaves the report stuck at "not set up" — it appends a factual ` · snapshot not
+  saved` marker to the compact line. A throttle no-op leaves the prior file in place, so
+  `existsSync` stays true and the marker is silent. It states a fact, not advice, so the
+  "instrument, not advisor" contract holds. Tests cover both the failure marker and the
+  silent success path. *Commit: flag a genuine snapshot-write failure in the statusline.*

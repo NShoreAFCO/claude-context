@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { usedTokens, percentage } from './lib/token-math.mjs';
 import { epochToMs } from './lib/time.mjs';
@@ -67,15 +68,23 @@ async function readStdin() {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-export async function runCli({ argv = process.argv, now = Date.now(), readInput = readStdin, env = process.env } = {}) {
+export async function runCli({ argv = process.argv, now = Date.now(), readInput = readStdin, env = process.env, deps = fs, write = (s) => process.stdout.write(s) } = {}) {
   const silent = argv.includes('--silent');
   let stdin = {};
   try { stdin = JSON.parse(await readInput()); } catch { stdin = {}; }
   const snapshot = buildSnapshot(stdin, now);
   // Key by this session's id (from stdin) so concurrent same-account sessions each
   // write their own file instead of thrashing one shared snapshot.
-  writeSnapshot(snapshotPath(snapshot.session_id, env), snapshot);
-  if (!silent) process.stdout.write(`${compactLine(snapshot)}\n`);
+  const snapPath = snapshotPath(snapshot.session_id, env);
+  writeSnapshot(snapPath, snapshot, { now, deps });
+  // If nothing is persisted at the path, the report will read "not set up" no matter how
+  // healthy this line looks (e.g. a read-only/full FS silently swallowed every write).
+  // Surface that as a fact — not advice — so the failure has a discovery path. A throttle
+  // no-op leaves the prior snapshot in place, so existsSync stays true and this is silent.
+  let persisted = false;
+  try { persisted = deps.existsSync(snapPath); } catch { persisted = false; }
+  const line = persisted ? compactLine(snapshot) : `${compactLine(snapshot)} · snapshot not saved`;
+  if (!silent) write(`${line}\n`);
 }
 
 // Importing this module does not run the collector — only direct execution does.

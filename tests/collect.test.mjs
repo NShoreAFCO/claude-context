@@ -82,3 +82,31 @@ test('runCli writes a session-keyed snapshot so concurrent sessions never share 
   assert.equal(snap.session_id, 'sid-xyz');
   assert.equal(snap.context.used_percentage, 50);
 });
+
+test('runCli statusline carries no marker when the snapshot persists', async () => {
+  const cfg = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-ok-'));
+  const raw = JSON.stringify({ session_id: 'sid-ok', context_window: { context_window_size: 200000, current_usage: { input_tokens: 100000 } } });
+  let out = '';
+  await runCli({ argv: ['node', 'collect'], now: 0, readInput: async () => raw, env: { CLAUDE_CONFIG_DIR: cfg }, write: (s) => { out += s; } });
+  assert.equal(out.trim(), 'Context 50%');
+  assert.doesNotMatch(out, /snapshot not saved/);
+});
+
+test('runCli flags a genuine write failure in the statusline (S1 discovery path)', async () => {
+  // A read-only/full FS: every write throws and nothing is ever persisted, so the report
+  // would read "not set up" forever. The statusline must say so instead of looking healthy.
+  const failingDeps = {
+    existsSync: () => false,
+    statSync: () => { throw new Error('nope'); },
+    readFileSync: () => { throw new Error('nope'); },
+    mkdirSync: () => {},
+    chmodSync: () => {},
+    writeFileSync: () => { throw new Error('EROFS: read-only file system'); },
+    renameSync: () => {},
+    unlinkSync: () => {},
+  };
+  const raw = JSON.stringify({ session_id: 'sid-fail', context_window: { context_window_size: 200000, current_usage: { input_tokens: 100000 } } });
+  let out = '';
+  await runCli({ argv: ['node', 'collect'], now: 0, readInput: async () => raw, env: { CLAUDE_CONFIG_DIR: os.tmpdir() }, deps: failingDeps, write: (s) => { out += s; } });
+  assert.match(out, /^Context 50% · snapshot not saved$/m);
+});
