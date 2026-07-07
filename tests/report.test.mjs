@@ -106,6 +106,22 @@ test('transcript fallback (no snapshot ever): inferred window, hedged %, context
   assert.equal(json.session_selection, 'newest-in-cwd-heuristic');
 });
 
+test('collector snapshot with an unpopulated window (0) renders "unavailable", never a literal null%', () => {
+  // First statusline ping of a brand-new session: window_size 0 → percentage() is null
+  // and windowInferred is false, so the numeric branch would interpolate a literal null%.
+  const res = {
+    source: 'collector',
+    model: { id: 'claude-opus-4-8', display_name: 'Opus 4.8' },
+    context: { window_size: 0, used_tokens: 0, used_percentage: null, input_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0, output_tokens: 0 },
+    rateLimits: null, rateLimitsStatus: 'unavailable_plan', cost: null, compactions: 0,
+    sessionSelection: 'session_id', snapshotAgeSeconds: 0, windowInferred: false,
+  };
+  const { human, json } = assembleReport(res, NOW);
+  assert.doesNotMatch(human, /null%/);
+  assert.match(human, /^Context: unavailable — window size not reported yet$/m);
+  assert.equal(json.context.used_percentage, null); // JSON still reports the raw measurement
+});
+
 test('cold start: null context, no crash', () => {
   const res = {
     source: 'unavailable', model: {}, context: null, rateLimits: null,

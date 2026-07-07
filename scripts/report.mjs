@@ -218,11 +218,17 @@ function sourceLine(r) {
 
 function buildHuman(r, now) {
   const lines = [`Claude Context — ${modelName(r.model)}`];
-  if (r.context && r.windowInferred) {
+  const c = r.context;
+  if (c && c.used_percentage == null) {
+    // Context present but the window size hasn't been reported yet (native window_size 0
+    // on a new session's first statusline ping), so %/headroom are undefined. Don't
+    // render a literal "null%" or a misleading "0 / 0 tokens · — headroom" tail.
+    lines.push('Context: unavailable — window size not reported yet');
+  } else if (c && r.windowInferred) {
     // Cold-start fallback: window size is a guess, so hedge the % and drop headroom.
-    lines.push(`Context: ~${r.context.used_percentage}% used · ${kt(r.context.used_tokens)} tokens · window inferred (${kt(r.context.window_size)} assumed)`);
-  } else if (r.context) {
-    lines.push(`Context: ${r.context.used_percentage}% used · ${kt(r.context.used_tokens)} / ${kt(r.context.window_size)} tokens · ${kt(headroom(r.context.used_tokens, r.context.window_size))} headroom`);
+    lines.push(`Context: ~${c.used_percentage}% used · ${kt(c.used_tokens)} tokens · window inferred (${kt(c.window_size)} assumed)`);
+  } else if (c) {
+    lines.push(`Context: ${c.used_percentage}% used · ${kt(c.used_tokens)} / ${kt(c.window_size)} tokens · ${kt(headroom(c.used_tokens, c.window_size))} headroom`);
   } else {
     lines.push('Context: unavailable — no measurement yet (no assistant turn recorded, collector off)');
   }
