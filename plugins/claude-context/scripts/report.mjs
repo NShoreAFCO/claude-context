@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readSnapshot, findNewestSnapshot } from './lib/snapshot.mjs';
-import { snapshotDir, snapshotFileName, resolveConfigDir, resolveSessionId } from './lib/config-dir.mjs';
-import { lastAssistantUsage, countCompactions, findNewestTranscript, transcriptForSession } from './lib/transcript.mjs';
+import { snapshotDir, snapshotFileName, resolveSessionId } from './lib/config-dir.mjs';
+import { lastAssistantUsage, countCompactions } from './lib/transcript.mjs';
 import { usedTokens, percentage, headroom } from './lib/token-math.mjs';
 import { formatDuration, clockHM } from './lib/time.mjs';
 
@@ -72,21 +72,24 @@ export function resolveReport({ now, sessionId = null, snapshotDir: dir, cwd, de
   const staleSnapshot = read.snapshot;
   const staleAge = read.ageSeconds;
   const knownWindow = numOrNull(staleSnapshot?.context?.window_size);
+  // Provenance follows whether the snapshot is THIS session's own keyed file (identified)
+  // or the newest-in-dir fallback — exactly as the fresh branch (:47) labels it.
+  const sessionSelection = identified ? 'session_id' : 'unverified-snapshot';
 
-  const configDir = resolveConfigDir(env);
-  // Prefer our OWN transcript (deterministic from the session id) over the cwd heuristic.
-  let transcript = sessionId ? transcriptForSession(configDir, cwd, sessionId, deps) : null;
-  let transcriptSelection = transcript ? 'session_id' : null;
-  if (!transcript) {
-    transcript = findNewestTranscript(configDir, cwd, deps);
-    if (transcript) transcriptSelection = 'newest-in-cwd-heuristic';
-  }
-  const compactions = transcript ? countCompactions(transcript, deps) : 0;
+  // Size usage and count compactions from the snapshot's OWN transcript_path (as the
+  // fresh branch does at :36) — NOT a separately-resolved transcript. This keeps the
+  // window (from the snapshot) and the usage/compactions (from the transcript) describing
+  // the SAME session. Pairing THIS session's transcript usage with a foreign newest
+  // snapshot's window produced a used_percentage that could be several-fold wrong while
+  // still stamped session_id (C1); reading the snapshot's own transcript removes the
+  // cross-session read at its source, so the label honestly covers every number.
+  const staleTranscript = staleSnapshot?.transcript_path ?? null;
+  const compactions = staleTranscript ? countCompactions(staleTranscript, deps) : 0;
 
   // Read the transcript's latest usage ONLY when the snapshot supplied a real window
   // to size it against (§2.1). Without a real window we never infer — we fall back to
   // the snapshot's own context field below.
-  const usage = knownWindow > 0 && transcript ? lastAssistantUsage(transcript, deps) : null;
+  const usage = knownWindow > 0 && staleTranscript ? lastAssistantUsage(staleTranscript, deps) : null;
 
   if (usage) {
     const used = usedTokens(usage);
@@ -106,7 +109,7 @@ export function resolveReport({ now, sessionId = null, snapshotDir: dir, cwd, de
       rateLimitsStatus: 'unavailable_stale',
       cost: null,
       compactions,
-      sessionSelection: transcriptSelection,
+      sessionSelection,
       snapshotAgeSeconds: staleAge,
       setupRequired: false,
     };
@@ -115,8 +118,7 @@ export function resolveReport({ now, sessionId = null, snapshotDir: dir, cwd, de
   // Transcript yielded no usage: fall back to the stale snapshot's OWN context field
   // (it already carries the real window). Provenance is `collector` — the numbers come
   // from the snapshot — distinguished from a live reading only by unavailable_stale +
-  // the reported age. Attribute the session to the snapshot's own identification, since
-  // the context is snapshot-derived (matches the fresh-collector state's semantics).
+  // the reported age.
   return {
     source: 'collector',
     model: staleSnapshot?.model ?? {},
@@ -125,7 +127,7 @@ export function resolveReport({ now, sessionId = null, snapshotDir: dir, cwd, de
     rateLimitsStatus: 'unavailable_stale',
     cost: null,
     compactions,
-    sessionSelection: identified ? 'session_id' : 'unverified-snapshot',
+    sessionSelection,
     snapshotAgeSeconds: staleAge,
     setupRequired: false,
   };
@@ -248,7 +250,9 @@ function sourceLine(r) {
   }
   if (r.source === 'transcript') {
     const age = r.snapshotAgeSeconds != null ? ` · snapshot ${r.snapshotAgeSeconds}s old (stale)` : '';
-    const sess = r.sessionSelection === 'session_id' ? 'this session' : 'newest-in-cwd (heuristic)';
+    let sess = 'newest-in-cwd (heuristic)';
+    if (r.sessionSelection === 'session_id') sess = 'this session';
+    else if (r.sessionSelection === 'unverified-snapshot') sess = 'unverified (newest snapshot)';
     return `Source: transcript fallback · context only · window from snapshot${age} · session: ${sess}`;
   }
   return 'Source: unavailable';

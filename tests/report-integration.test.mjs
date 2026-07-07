@@ -88,6 +88,43 @@ test('C1: each session reads its OWN keyed snapshot, never a concurrent session\
   assert.equal(json.session_selection, 'session_id');
 });
 
+test("C1 (stale branch): a FOREIGN newest snapshot never sizes THIS session's usage against the foreign window under a session_id label", () => {
+  // Regression for the collector-idle path. Trigger: this session (sess-B) has its own
+  // transcript but NO own keyed snapshot yet (e.g. collector just enabled mid-session),
+  // while a neighbor 1M-window session (sess-A) has gone idle and left the newest, but
+  // STALE, snapshot in the dir. The old code sized sess-B's transcript tokens against
+  // sess-A's 1,000,000 window and stamped the result session_id — a ~5x-low context %.
+  const dir = tmpDir('c1-stale');
+
+  // sess-A: idle 1M-window session. Its stale snapshot is the newest file, and it points
+  // at its OWN transcript (800k tokens → 80% of 1M — internally consistent).
+  const aTranscript = path.join(dir, 'A.jsonl');
+  fs.writeFileSync(aTranscript, `${JSON.stringify({ type: 'assistant', message: { model: 'claude-opus-4-8[1m]', usage: { input_tokens: 800000 } } })}\n`);
+  const past = NOW - 10 * 60 * 1000; // 10 min → stale
+  const stdinA = { session_id: 'sess-A', model: { id: 'claude-opus-4-8[1m]' }, context_window: { context_window_size: 1000000, used_percentage: 80, current_usage: { input_tokens: 800000 } }, transcript_path: aTranscript };
+  writeSnap(dir, 'sess-A', buildSnapshot(stdinA, past), past);
+
+  // sess-B: THIS session. It has its own transcript (24k tokens) at the cwd-encoded path
+  // the old code resolved via transcriptForSession — but no snapshot of its own. If the
+  // fix regressed, 24000 / 1,000,000 → ~2%, stamped session_id.
+  const cwd = '/proj';
+  const bDir = path.join(dir, 'projects', '-proj'); // encodeProjectDir('/proj')
+  fs.mkdirSync(bDir, { recursive: true });
+  fs.writeFileSync(path.join(bDir, 'sess-B.jsonl'), `${JSON.stringify({ type: 'assistant', message: { model: 'claude-opus-4-8', usage: { input_tokens: 24000 } } })}\n`);
+
+  const res = resolveReport({ now: NOW, sessionId: 'sess-B', snapshotDir: dir, cwd, deps: fs, env: { CLAUDE_CONFIG_DIR: dir } });
+  const { json } = assembleReport(res, NOW);
+
+  // The one guarantee the contract makes: an unverifiable window is never labeled certain.
+  assert.equal(json.session_selection, 'unverified-snapshot');
+  assert.notEqual(json.session_selection, 'session_id');
+  // Window and usage now describe the SAME session (sess-A's snapshot + its own transcript),
+  // so the percentage is internally consistent — not sess-B's tokens over sess-A's window.
+  assert.equal(json.context.window_size, 1000000);
+  assert.equal(json.context.used_tokens, 800000);
+  assert.equal(json.context.used_percentage, 80);
+});
+
 test('no session id (older Claude Code / subagent): falls back to the newest snapshot, flagged unverified', () => {
   const dir = tmpDir('unverified');
   const s = { session_id: 'whoever', context_window: { context_window_size: 200000, used_percentage: 33, current_usage: { input_tokens: 66000 } }, transcript_path: null };
