@@ -66,3 +66,40 @@ test('writeSnapshot skips unchanged content within throttle window', () => {
   // same content (ignoring updated_at), 10s later, still within 30s throttle
   assert.equal(writeSnapshot(p, snap({ updated_at: new Date(11000).toISOString() }), { now: 11000 }), false);
 });
+
+test('writeSnapshot keeps the snapshot dir private (0700), tightening a pre-existing 0755 dir', () => {
+  if (process.platform === 'win32') return; // POSIX modes only
+  // Fresh dir: created private.
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-mode-'));
+  const dir = path.join(base, 'claude-context');
+  writeSnapshot(path.join(dir, 'snapshot.json'), snap(), { now: 1000 });
+  assert.equal(fs.statSync(dir).mode & 0o777, 0o700);
+
+  // Pre-existing world-traversable dir (as an older version left it): tightened on write.
+  const base2 = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-mode2-'));
+  const dir2 = path.join(base2, 'claude-context');
+  fs.mkdirSync(dir2, { recursive: true });
+  fs.chmodSync(dir2, 0o755);
+  writeSnapshot(path.join(dir2, 'snapshot.json'), snap(), { now: 1000 });
+  assert.equal(fs.statSync(dir2).mode & 0o777, 0o700);
+});
+
+test('writeSnapshot cleans up its temp file when the atomic rename fails', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-tmp-'));
+  const dir = path.join(base, 'nested');
+  const p = path.join(dir, 'snapshot.json');
+  const unlinked = [];
+  const deps = {
+    existsSync: fs.existsSync,
+    statSync: fs.statSync,
+    readFileSync: fs.readFileSync,
+    mkdirSync: fs.mkdirSync,
+    chmodSync: () => {},
+    writeFileSync: fs.writeFileSync,
+    renameSync: () => { throw new Error('rename boom'); },
+    unlinkSync: (f) => { unlinked.push(f); fs.unlinkSync(f); },
+  };
+  assert.equal(writeSnapshot(p, snap(), { now: 1000, deps }), false);
+  assert.equal(unlinked.length, 1); // the temp file was removed
+  assert.deepEqual(fs.readdirSync(dir).filter((f) => f.includes('.tmp')), []); // none orphaned
+});

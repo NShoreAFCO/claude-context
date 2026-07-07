@@ -24,16 +24,22 @@ function shouldWrite(snapshotPath, next, now, deps) {
 }
 
 export function writeSnapshot(snapshotPath, snapshot, { now = Date.now(), deps = fs } = {}) {
+  let tmp = null;
   try {
     const dir = path.dirname(snapshotPath);
-    deps.mkdirSync(dir, { recursive: true });
+    deps.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    // mkdir's mode only applies to dirs it creates; tighten one an older version
+    // (or a different umask) may have left world-traversable. Best-effort.
+    try { deps.chmodSync(dir, 0o700); } catch { /* not ours to chmod; the 0600 file still protects content */ }
     if (!shouldWrite(snapshotPath, snapshot, now, deps)) return false;
-    const tmp = path.join(dir, `.${path.basename(snapshotPath)}.${process.pid}.${now}.tmp`);
+    tmp = path.join(dir, `.${path.basename(snapshotPath)}.${process.pid}.${now}.tmp`);
     deps.writeFileSync(tmp, `${JSON.stringify(snapshot, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
     deps.renameSync(tmp, snapshotPath);
     deps.chmodSync(snapshotPath, 0o600);
     return true;
   } catch {
+    // Don't leak a temp file per tick when rename/chmod persistently fails.
+    if (tmp) { try { deps.unlinkSync(tmp); } catch { /* already gone */ } }
     return false;
   }
 }
