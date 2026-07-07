@@ -60,7 +60,7 @@ tool that hard-coded its own thresholds would just fight the ones you wrote.
 Then any agent — or you — can ask:
 
 ```
-/claude-context
+/claude-context:claude-context
 ```
 
 It works immediately, reading context health straight from the session transcript.
