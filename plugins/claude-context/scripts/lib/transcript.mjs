@@ -1,15 +1,8 @@
 // Adapted from claude-hud (MIT, © Jarrod Watts): transcript JSONL parsing.
 import fs from 'node:fs';
-import path from 'node:path';
-import { sanitizeSessionId } from './config-dir.mjs';
 
 function num(v) {
   return typeof v === 'number' && Number.isFinite(v) ? v : 0;
-}
-
-// How Claude Code encodes a cwd into a projects/ subdirectory name.
-function encodeProjectDir(cwd) {
-  return String(cwd).replace(/[/\\.]/g, '-');
 }
 
 function readJsonl(filePath, deps) {
@@ -54,30 +47,4 @@ export function countCompactions(filePath, deps = fs) {
     if (typeof ts === 'string' && Number.isFinite(Date.parse(ts))) count++;
   }
   return count;
-}
-
-// This session's own transcript, resolved deterministically from its session id
-// (the transcript is named <session-id>.jsonl). Preferred over the newest-in-cwd
-// heuristic, which can't tell two same-cwd sessions apart.
-export function transcriptForSession(configDir, cwd, sessionId, deps = fs) {
-  const safe = sanitizeSessionId(sessionId);
-  if (!safe) return null;
-  const file = path.join(configDir, 'projects', encodeProjectDir(cwd), `${safe}.jsonl`);
-  try { deps.statSync(file); return file; } catch { return null; }
-}
-
-export function findNewestTranscript(configDir, cwd, deps = fs) {
-  const dir = path.join(configDir, 'projects', encodeProjectDir(cwd));
-  let files;
-  try { files = deps.readdirSync(dir); } catch { return null; }
-  let newest = null;
-  let newestMtime = -Infinity;
-  for (const f of files) {
-    if (!f.endsWith('.jsonl')) continue;
-    const full = path.join(dir, f);
-    let mtime;
-    try { mtime = deps.statSync(full).mtimeMs; } catch { continue; }
-    if (mtime > newestMtime) { newestMtime = mtime; newest = full; }
-  }
-  return newest;
 }

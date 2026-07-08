@@ -262,9 +262,9 @@ function sourceLine(r) {
   }
   if (r.source === 'transcript') {
     const age = r.snapshotAgeSeconds != null ? ` · snapshot ${r.snapshotAgeSeconds}s old (stale)` : '';
-    let sess = 'newest-in-cwd (heuristic)';
-    if (r.sessionSelection === 'session_id') sess = 'this session';
-    else if (r.sessionSelection === 'unverified-snapshot') sess = 'unverified (newest snapshot)';
+    // The transcript branch always stamps session_id or unverified-snapshot (report.mjs
+    // resolves sessionSelection from `identified`), so these two cases are exhaustive.
+    const sess = r.sessionSelection === 'session_id' ? 'this session' : 'unverified (newest snapshot)';
     return `Source: transcript fallback · context only · window from snapshot${age} · session: ${sess}`;
   }
   return 'Source: unavailable';

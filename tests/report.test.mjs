@@ -83,11 +83,11 @@ test('collector available but a window is missing → factual copy, never "enabl
 });
 
 test('stale snapshot → unavailable_stale keeps the age and never tells the user to run setup', () => {
-  const res = { ...collectorRes, source: 'transcript', rateLimits: null, rateLimitsStatus: 'unavailable_stale', snapshotAgeSeconds: 420, sessionSelection: 'newest-in-cwd-heuristic' };
+  const res = { ...collectorRes, source: 'transcript', rateLimits: null, rateLimitsStatus: 'unavailable_stale', snapshotAgeSeconds: 420, sessionSelection: 'unverified-snapshot' };
   const { human, json } = assembleReport(res, NOW);
   assert.match(human, /^Session \(5h\): unavailable — last collector reading 420s ago \(idle; send a message to refresh\)$/m);
   assert.doesNotMatch(human, /\/claude-context:setup/);
-  assert.match(human, /^Source: transcript fallback · context only · window from snapshot · snapshot 420s old \(stale\) · session: newest-in-cwd \(heuristic\)$/m);
+  assert.match(human, /^Source: transcript fallback · context only · window from snapshot · snapshot 420s old \(stale\) · session: unverified \(newest snapshot\)$/m);
   assert.equal(json.rate_limits_status, 'unavailable_stale');
 });
 
@@ -153,7 +153,7 @@ test('not set up (no snapshot ever): cold-start block + all-null JSON + setup_re
 
 test('no-advice contract: rendered output carries no advice/level vocabulary in any state', () => {
   const forbidden = [/should compact/i, /recommend/i, /\byou should\b/i, /traffic.light/i, /\bpressure\b/i, /\b(70|85|90)%/];
-  const staleTranscriptRes = { ...collectorRes, source: 'transcript', rateLimits: null, rateLimitsStatus: 'unavailable_stale', snapshotAgeSeconds: 420, sessionSelection: 'newest-in-cwd-heuristic', setupRequired: false };
+  const staleTranscriptRes = { ...collectorRes, source: 'transcript', rateLimits: null, rateLimitsStatus: 'unavailable_stale', snapshotAgeSeconds: 420, sessionSelection: 'unverified-snapshot', setupRequired: false };
   const staleSnapshotRes = { ...collectorRes, source: 'collector', rateLimits: null, rateLimitsStatus: 'unavailable_stale', snapshotAgeSeconds: 600, setupRequired: false };
   const notSetUpRes = { source: 'unavailable', model: {}, context: null, rateLimits: null, rateLimitsStatus: 'unavailable_collector', cost: null, compactions: null, sessionSelection: null, snapshotAgeSeconds: null, setupRequired: true };
   const planRes = { ...collectorRes, rateLimits: null, rateLimitsStatus: 'unavailable_plan' };
