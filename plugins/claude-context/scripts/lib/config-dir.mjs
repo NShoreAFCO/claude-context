@@ -58,3 +58,19 @@ export function resolveSessionId({ argv = [], env = {} } = {}) {
   if (!trimmed || /[${}]/.test(trimmed)) return null; // reject unsubstituted templates
   return trimmed;
 }
+
+// The co-existence sidecar: stores the entire original statusLine object so teardown
+// restores it verbatim. Same 0700 dir as the snapshot; survives plugin upgrades.
+export function sidecarPath(env = process.env) {
+  return path.join(snapshotDir(env), 'coexist.json');
+}
+
+// Claude Code's user settings file and the single full-file backup the wiring module
+// writes before its first mutating write (see the design spec §3.5, §3.8).
+export function settingsPath(env = process.env) {
+  return path.join(resolveConfigDir(env), 'settings.json');
+}
+
+export function backupPath(env = process.env) {
+  return path.join(resolveConfigDir(env), 'settings.json.claude-context.bak');
+}

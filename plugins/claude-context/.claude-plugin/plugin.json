@@ -1,11 +1,11 @@
 {
   "name": "claude-context",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "On-demand session resource facts (context window, 5h/7d usage, cost, compactions) for users and agents — pure measurements, no advice.",
   "author": { "name": "Ovid" },
   "license": "MIT",
   "homepage": "https://github.com/Ovid/claude-context",
   "repository": "https://github.com/Ovid/claude-context",
-  "commands": ["./commands/setup.md"],
+  "commands": ["./commands/setup.md", "./commands/teardown.md"],
   "keywords": ["context", "usage", "rate-limits", "statusline", "claude-code", "telemetry"]
 }

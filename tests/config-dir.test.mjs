@@ -9,6 +9,9 @@ import {
   snapshotFileName,
   snapshotPath,
   resolveSessionId,
+  sidecarPath,
+  settingsPath,
+  backupPath,
 } from '../plugins/claude-context/scripts/lib/config-dir.mjs';
 
 test('honors CLAUDE_CONFIG_DIR when set', () => {
@@ -63,5 +66,23 @@ test('resolveSessionId: --session-id arg wins, then env, else null; placeholders
   assert.equal(
     resolveSessionId({ argv: ['node', 'r', '--session-id', '${CLAUDE_SESSION_ID}'], env: {} }),
     null,
+  );
+});
+
+test('sidecarPath is coexist.json under claude-context', () => {
+  assert.equal(
+    sidecarPath({ CLAUDE_CONFIG_DIR: '/tmp/cfg' }),
+    path.join('/tmp/cfg', 'claude-context', 'coexist.json'),
+  );
+});
+
+test('settingsPath and backupPath sit at the config-dir root', () => {
+  assert.equal(
+    settingsPath({ CLAUDE_CONFIG_DIR: '/tmp/cfg' }),
+    path.join('/tmp/cfg', 'settings.json'),
+  );
+  assert.equal(
+    backupPath({ CLAUDE_CONFIG_DIR: '/tmp/cfg' }),
+    path.join('/tmp/cfg', 'settings.json.claude-context.bak'),
   );
 });

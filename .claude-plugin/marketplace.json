@@ -2,7 +2,7 @@
   "name": "claude-context",
   "owner": { "name": "Ovid" },
   "description": "On-demand session resource facts for users and agents — pure measurements, no advice.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "plugins": [
     {
       "name": "claude-context",

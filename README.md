@@ -52,15 +52,34 @@ tool that hard-coded its own thresholds would just fight the ones you wrote.
 
 ## Install
 
+Add marketplace:
+
 ```
 /plugin marketplace add Ovid/claude-context
+```
+
+Install (must be a separate prompt):
+
+```
 /plugin install claude-context@claude-context
+```
+
+Set up:
+
+```
+/claude-context:setup
 ```
 
 Then any agent — or you — can ask:
 
 ```
 /claude-context:claude-context
+```
+
+Or:
+
+```
+/claude-context
 ```
 
 Reporting requires the one-time `/claude-context:setup` (see below). Before that's
@@ -87,9 +106,25 @@ enable it once:
 ```
 
 This wires a small statusline helper that captures the usage and cost figures Claude
-Code shares only with your statusline. Already have a statusline? Setup backs it up
-and asks before changing anything — it never silently replaces your setup. (Live
-5h/7d usage requires a Pro or Max subscription.)
+Code shares only with your statusline. (Live 5h/7d usage requires a Pro or Max
+subscription.)
+
+### Already have a statusline?
+
+claude-context **co-exists** with it. `/claude-context:setup` wraps your existing statusline
+so both run — your displayed line is **unchanged** — while claude-context quietly captures
+its snapshot underneath. Undo any time with `/claude-context:teardown`, which restores your
+original statusline verbatim. Setup **never** replaces or takes over a slot it doesn't own.
+
+Co-existence is available on **macOS, Linux, and Windows + Git Bash** in this alpha. On
+**native PowerShell/cmd** claude-context does not wire a statusline this release (a change
+from 0.2.0, which shipped an empty-slot PowerShell collector) — run Claude Code from **Git
+Bash** for live numbers, or wait for a later release.
+
+**What if another statusline plugin later takes over the slot?** claude-context fails safe:
+your original command is still stored, `/claude-context:teardown` refuses to clobber the new
+tool and instead shows you the preserved original. claude-context stays one level deep — it
+co-exists with exactly one prior statusline, not several.
 
 ## Every number says how much to trust it
 
