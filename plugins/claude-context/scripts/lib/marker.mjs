@@ -10,9 +10,12 @@ export function markerAssignment(variant) {
   return `${MARKER_VAR}=${variant}`;
 }
 
+// Anchored so a longer name (=coexistence, =collector) is NOT read as our slot: the
+// variant must be followed by a non-identifier char (separator or end-of-string).
+const MARKER_RE = new RegExp(`${MARKER_VAR}=(coexist|collect)(?![A-Za-z0-9_])`);
+
 export function detectMarker(command) {
   if (typeof command !== 'string') return null;
-  if (command.includes(`${MARKER_VAR}=coexist`)) return 'coexist';
-  if (command.includes(`${MARKER_VAR}=collect`)) return 'collect';
-  return null;
+  const m = command.match(MARKER_RE);
+  return m ? m[1] : null;
 }

@@ -31,3 +31,12 @@ test('detectMarker returns null for foreign / empty / non-string', () => {
   assert.equal(detectMarker(null), null);
   assert.equal(detectMarker(undefined), null);
 });
+
+test('detectMarker is anchored: a longer variant name is not our slot', () => {
+  // Substring-only matching would claim these as ours; the assignment is anchored.
+  assert.equal(detectMarker('export CLAUDE_CONTEXT_WRAPPER=coexistence; exec x'), null);
+  assert.equal(detectMarker('export CLAUDE_CONTEXT_WRAPPER=collector; exec x'), null);
+  // A trailing separator (`;`, space, end) still detects the real variant.
+  assert.equal(detectMarker('export CLAUDE_CONTEXT_WRAPPER=coexist; exec x'), 'coexist');
+  assert.equal(detectMarker('export CLAUDE_CONTEXT_WRAPPER=collect'), 'collect');
+});
