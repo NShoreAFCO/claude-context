@@ -45,7 +45,7 @@ and redacts any secrets in the preview **inside the module** — the raw command
 this transcript):
 
 ```bash
-node "{PLUGIN_DIR}scripts/wiring.mjs" detect
+"{RUNTIME_PATH}" "{PLUGIN_DIR}scripts/wiring.mjs" detect
 ```
 
 Resolve `{PLUGIN_DIR}` the same way the statusline command does — the newest installed
@@ -86,7 +86,7 @@ The detector prints one JSON line: `{ "slot", "preview", "hasSidecar", "sidecarM
 ## Step 4: Apply via the wiring module
 
 ```bash
-node "{PLUGIN_DIR}scripts/wiring.mjs" wrap --runtime "{RUNTIME_PATH}" --platform {PLATFORM}
+"{RUNTIME_PATH}" "{PLUGIN_DIR}scripts/wiring.mjs" wrap --runtime "{RUNTIME_PATH}" --platform {PLATFORM}
 ```
 
 It writes exactly one `0600` full-file `settings.json.claude-context.bak` before its first

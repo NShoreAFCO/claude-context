@@ -7,7 +7,15 @@ Reverse whatever `/claude-context:setup` wired, using the tested `scripts/wiring
 module. Ownership is decided by the marker the current `statusLine` command carries — never
 by string-matching a resolved command — so an upgraded plugin path still tears down cleanly.
 
-## Step 1: Resolve the plugin dir
+## Step 1: Resolve the runtime and plugin dir
+
+Resolve the runtime the same way `/claude-context:setup` does — prefer `bun`, fall back to
+`node` (`wiring.mjs` is pure `node:` ESM and runs fine under either). Record the path as
+`{RUNTIME_PATH}`. If neither is found, stop and tell the user to install Node.js LTS.
+
+```bash
+command -v bun 2>/dev/null || command -v node 2>/dev/null
+```
 
 ```bash
 PLUGIN_DIR=$(ls -d "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/claude-context/*/ 2>/dev/null | awk -F/ '{ print $(NF-1) "\t" $0 }' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+[[:space:]]' | sort -t. -k1,1n -k2,2n -k3,3n -k4,4n | tail -1 | cut -f2-)
@@ -16,7 +24,7 @@ PLUGIN_DIR=$(ls -d "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/claude-
 ## Step 2: Run teardown
 
 ```bash
-node "{PLUGIN_DIR}scripts/wiring.mjs" teardown
+"{RUNTIME_PATH}" "{PLUGIN_DIR}scripts/wiring.mjs" teardown
 ```
 
 It prints one JSON line with `action`. Report accordingly, then tell the user to **fully
