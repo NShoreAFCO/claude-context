@@ -92,13 +92,6 @@ export function listSnapshotsByMtime(dir, { deps = fs } = {}) {
   return found.map((x) => x.full);
 }
 
-// Fallback for when the report can't identify its own session (older Claude Code,
-// or a subagent): the newest snapshot-*.json in the dir. It may belong to another
-// concurrent session, so callers must flag its provenance as unverified.
-export function findNewestSnapshot(dir, { deps = fs } = {}) {
-  return listSnapshotsByMtime(dir, { deps })[0] ?? null;
-}
-
 export function readSnapshot(
   snapshotPath,
   { now = Date.now(), freshnessMs = FRESHNESS_MS, deps = fs } = {},
