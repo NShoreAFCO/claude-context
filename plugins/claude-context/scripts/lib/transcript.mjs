@@ -1,9 +1,6 @@
 // Adapted from claude-hud (MIT, © Jarrod Watts): transcript JSONL parsing.
 import fs from 'node:fs';
-
-function num(v) {
-  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
-}
+import { num } from './token-math.mjs';
 
 function readJsonl(filePath, deps) {
   const raw = deps.readFileSync(filePath, 'utf8');

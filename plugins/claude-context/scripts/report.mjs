@@ -5,12 +5,8 @@ import { pathToFileURL } from 'node:url';
 import { readSnapshot, listSnapshotsByMtime } from './lib/snapshot.mjs';
 import { snapshotDir, snapshotFileName, resolveSessionId } from './lib/config-dir.mjs';
 import { lastAssistantUsage, countCompactions } from './lib/transcript.mjs';
-import { usedTokens, percentage, headroom } from './lib/token-math.mjs';
+import { usedTokens, percentage, headroom, numOrNull } from './lib/token-math.mjs';
 import { formatDuration, clockHM } from './lib/time.mjs';
-
-function numOrNull(v) {
-  return typeof v === 'number' && Number.isFinite(v) ? v : null;
-}
 
 function isProviderModel(id, env = process.env) {
   const s = String(id ?? '').toLowerCase();
