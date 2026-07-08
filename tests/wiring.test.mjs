@@ -119,6 +119,63 @@ test('wrap: writes exactly ONE full-file backup, mode 0600, before mutating', ()
   if (process.platform !== 'win32') assert.equal(fs.statSync(bak).mode & 0o777, 0o600);
 });
 
+test('wrap: foreign slot + missing runtime → throws BEFORE writing any sidecar or backup', () => {
+  const cfg = mkCfg();
+  writeSettings(cfg, { statusLine: { type: 'command', command: FOREIGN } });
+  // buildStatuslineCommand throws on a blank runtime; it must fire before the first write,
+  // so a bad-runtime foreign wrap leaves no stray sidecar/backup to wedge a later run.
+  assert.throws(() => wrap({ env: { CLAUDE_CONFIG_DIR: cfg }, now: 0 }));
+  assert.equal(
+    fs.existsSync(path.join(cfg, 'claude-context', 'coexist.json')),
+    false,
+    'no stray sidecar',
+  );
+  assert.equal(
+    fs.existsSync(path.join(cfg, 'settings.json.claude-context.bak')),
+    false,
+    'no stray backup',
+  );
+  assert.equal(readSettingsFile(cfg).statusLine.command, FOREIGN, 'slot untouched');
+});
+
+test('wrap: a failing rename leaves no .tmp file behind (atomic writers clean up)', () => {
+  const cfg = mkCfg();
+  const deps = {
+    ...fs,
+    renameSync: () => {
+      throw new Error('EXDEV');
+    },
+  };
+  assert.throws(() => wrap({ env: { CLAUDE_CONFIG_DIR: cfg }, now: 0, runtime: RUNTIME, deps }));
+  const leftovers = fs.readdirSync(cfg).filter((f) => f.includes('.tmp'));
+  assert.deepEqual(leftovers, [], 'temp file unlinked after the rename failed');
+});
+
+test('wrap: a chmod failure after a successful rename does not fail the write', () => {
+  const cfg = mkCfg();
+  const deps = {
+    ...fs,
+    chmodSync: () => {
+      throw new Error('EPERM');
+    },
+  };
+  // The mode is already applied at temp-write time, so the trailing chmod is best-effort.
+  const r = wrap({ env: { CLAUDE_CONFIG_DIR: cfg }, now: 0, runtime: RUNTIME, deps });
+  assert.equal(r.action, 'wired-collect');
+  assert.equal(detectMarker(readSettingsFile(cfg).statusLine.command), 'collect');
+});
+
+test('wrap: tightens an existing loose sidecar dir to 0700', () => {
+  if (process.platform === 'win32') return;
+  const cfg = mkCfg();
+  writeSettings(cfg, { statusLine: { type: 'command', command: FOREIGN } });
+  const scDir = path.join(cfg, 'claude-context');
+  fs.mkdirSync(scDir, { recursive: true });
+  fs.chmodSync(scDir, 0o755); // simulate a loose dir left by an older version / umask
+  wrap({ env: { CLAUDE_CONFIG_DIR: cfg }, now: 0, runtime: RUNTIME });
+  assert.equal(fs.statSync(scDir).mode & 0o777, 0o700, 'sidecar dir re-tightened to 0700');
+});
+
 test('wrap: idempotent for already-ours via marker, never nests', () => {
   const cfg = mkCfg();
   writeSettings(cfg, { statusLine: { type: 'command', command: COEXIST } });

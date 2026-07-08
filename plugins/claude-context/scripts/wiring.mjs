@@ -56,8 +56,38 @@ export function detect({ env = process.env, deps = fs } = {}) {
   };
 }
 
-function ensureDir(dir, deps) {
+function ensureDir(dir, deps, { tighten = false } = {}) {
   deps.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  // mkdir's mode only applies to a dir it creates; tighten an existing loose one (older
+  // version / umask). Only for our own subdir — never the user's top-level config dir.
+  if (tighten) {
+    try {
+      deps.chmodSync(dir, 0o700);
+    } catch {
+      /* not ours to chmod; the 0600 file still protects content */
+    }
+  }
+}
+
+// Move a temp into place, unlinking the temp if the rename fails so a flaky FS never leaks
+// a per-attempt temp file. The trailing chmod is best-effort — the mode is already applied
+// at temp-write time, so a chmod failure must NOT fail an already-committed write.
+function commitTemp(deps, tmp, dest, mode) {
+  try {
+    deps.renameSync(tmp, dest);
+  } catch (e) {
+    try {
+      deps.unlinkSync(tmp);
+    } catch {
+      /* already gone */
+    }
+    throw e;
+  }
+  try {
+    deps.chmodSync(dest, mode);
+  } catch {
+    /* best-effort umask-defeat; the temp already carried the mode */
+  }
 }
 
 // Copy settings.json to the single stable 0600 backup — exactly once per run, and only
@@ -69,8 +99,7 @@ function backupOnce(env, deps, state) {
     const bp = backupPath(env);
     const tmp = `${bp}.${process.pid}.${state.now}.tmp`;
     deps.writeFileSync(tmp, deps.readFileSync(sp), { mode: 0o600 });
-    deps.renameSync(tmp, bp);
-    deps.chmodSync(bp, 0o600);
+    commitTemp(deps, tmp, bp, 0o600);
   }
   state.backedUp = true;
 }
@@ -88,18 +117,16 @@ function writeSettingsAtomic(env, deps, obj) {
   }
   const tmp = path.join(dir, `.settings.json.${process.pid}.${Date.now()}.tmp`);
   deps.writeFileSync(tmp, `${JSON.stringify(obj, null, 2)}\n`, { mode });
-  deps.renameSync(tmp, sp);
-  deps.chmodSync(sp, mode);
+  commitTemp(deps, tmp, sp, mode);
 }
 
 function writeSidecarAtomic(env, deps, obj) {
   const scp = sidecarPath(env);
   const dir = path.dirname(scp);
-  ensureDir(dir, deps);
+  ensureDir(dir, deps, { tighten: true });
   const tmp = path.join(dir, `.coexist.json.${process.pid}.${Date.now()}.tmp`);
   deps.writeFileSync(tmp, `${JSON.stringify(obj, null, 2)}\n`, { mode: 0o600 });
-  deps.renameSync(tmp, scp);
-  deps.chmodSync(scp, 0o600);
+  commitTemp(deps, tmp, scp, 0o600);
 }
 
 export function wrap({
@@ -119,13 +146,13 @@ export function wrap({
   const state = { backedUp: false, now };
 
   const setVariant = (variant) => {
+    // Build (and thus validate runtime) BEFORE any disk write, so a bad runtime never leaves
+    // a half-written backup/sidecar behind.
+    const command = buildStatuslineCommand({ variant, runtime, platform });
     backupOnce(env, deps, state);
     writeSettingsAtomic(env, deps, {
       ...base,
-      statusLine: {
-        type: 'command',
-        command: buildStatuslineCommand({ variant, runtime, platform }),
-      },
+      statusLine: { type: 'command', command },
     });
   };
 
@@ -155,7 +182,9 @@ export function wrap({
       storedOriginalPreview: previewCommand(sidecar.original.command),
     };
   }
-  // Fresh foreign wrap: back up, store the ORIGINAL first (safe ordering), then wire coexist.
+  // Fresh foreign wrap: build the wrapper command FIRST (validates runtime before any write),
+  // then back up, store the ORIGINAL (safe ordering), then wire coexist.
+  const wrapperCommand = buildStatuslineCommand({ variant: 'coexist', runtime, platform });
   backupOnce(env, deps, state);
   writeSidecarAtomic(env, deps, {
     original: base.statusLine,
@@ -163,10 +192,7 @@ export function wrap({
   });
   writeSettingsAtomic(env, deps, {
     ...base,
-    statusLine: {
-      type: 'command',
-      command: buildStatuslineCommand({ variant: 'coexist', runtime, platform }),
-    },
+    statusLine: { type: 'command', command: wrapperCommand },
   });
   return { action: 'wired-coexist', slot };
 }
