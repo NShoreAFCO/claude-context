@@ -78,6 +78,7 @@ test('collector -> report seam: resolveReport reads a real buildSnapshot() outpu
   assert.equal(json.rate_limits.five_hour.used_percentage, 25);
   // Seams every other test skips (all cost assertions elsewhere use hand-built
   // resolutions): a rename in any of these would ship null/— with the suite green.
+  assert.equal(json.compactions, null); // fixture stdin has transcript_path:null → unobservable, not 0
   assert.equal(json.cost_usd, 0.42); // snapshot.cost.total_cost_usd -> json.cost_usd
   assert.equal(json.rate_limits.seven_day.used_percentage, 61); // the second window round-trips too
   assert.equal(json.context.used_percentage, 46); // native used_percentage passthrough
@@ -260,4 +261,5 @@ test('stale snapshot, no transcript: resolveReport falls back to the snapshot co
   assert.equal(json.context.window_size, 200000); // real window from the snapshot, not inferred
   assert.equal(json.context.used_percentage, 46); // accurate against the real window
   assert.equal(json.setup_required, false);
+  assert.equal(json.compactions, null); // no transcript_path → unobservable, not a fabricated 0
 });

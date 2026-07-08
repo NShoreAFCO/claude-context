@@ -49,7 +49,9 @@ export function resolveReport({
     // snapshot-stale. It can therefore be fresher than the other fields — a compaction
     // landing after capture bumps the count while context still shows the pre-capture
     // value; only context carries snapshot_age_seconds. This is by design, not drift.
-    const compactions = s.transcript_path ? countCompactions(s.transcript_path, deps) : 0;
+    // No transcript_path (degenerate/malformed stdin) → the count is unobservable, same as
+    // an unreadable transcript: null, not a fabricated 0. Honors the facts-only contract.
+    const compactions = s.transcript_path ? countCompactions(s.transcript_path, deps) : null;
     let rateLimitsStatus = 'available';
     if (!s.rate_limits)
       rateLimitsStatus = isProviderModel(s.model?.id, env)
@@ -103,7 +105,7 @@ export function resolveReport({
   // still stamped session_id (C1); reading the snapshot's own transcript removes the
   // cross-session read at its source, so the label honestly covers every number.
   const staleTranscript = staleSnapshot?.transcript_path ?? null;
-  const compactions = staleTranscript ? countCompactions(staleTranscript, deps) : 0;
+  const compactions = staleTranscript ? countCompactions(staleTranscript, deps) : null;
 
   // Read the transcript's latest usage ONLY when the snapshot supplied a real window
   // to size it against (§2.1). Without a real window we never infer — we fall back to
