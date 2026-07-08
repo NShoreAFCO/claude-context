@@ -24,3 +24,11 @@ test('marketplace.json points at this plugin', () => {
   assert.match(m.version, /^\d+\.\d+\.\d+$/);   // top-level (canonical) — NOT metadata.version
   assert.equal(typeof m.description, 'string'); // top-level (canonical) — NOT metadata.description
 });
+
+test('the three version fields agree (root package.json is private but must not drift)', () => {
+  const pkg = readJson('package.json').version;
+  const plugin = readJson('plugins/claude-context/.claude-plugin/plugin.json').version;
+  const marketplace = readJson('.claude-plugin/marketplace.json').version;
+  assert.equal(plugin, marketplace, 'plugin.json and marketplace.json versions must match');
+  assert.equal(pkg, plugin, 'root package.json version must match the shipped plugin version');
+});
