@@ -274,9 +274,20 @@ export function teardown({ env = process.env, deps = fs } = {}) {
       removeIfPresent(backupPath(env), deps);
       return { action: 'restored-original' };
     }
-    // Our wrapper is wired but there's no restorable sidecar — nothing to restore. Back to
-    // empty, and clear any present-but-unusable sidecar file so it is never orphaned
-    // (matching the removed-collect branch).
+    // Sidecar lost, but the 0600 backup is a verbatim copy of the pre-setup settings.json —
+    // it still holds the user's original statusLine. Recover from it rather than deleting the
+    // last surviving copy of the original (C1). Only its statusLine, not the whole file:
+    // restoring the whole backup would revert unrelated settings.json edits made after wrap.
+    const backup = readJson(backupPath(env), deps);
+    if (backup && 'statusLine' in backup) {
+      backupOnce(env, deps, state);
+      writeSettingsAtomic(env, deps, { ...base, statusLine: backup.statusLine });
+      removeIfPresent(sidecarPath(env), deps);
+      removeIfPresent(backupPath(env), deps);
+      return { action: 'restored-from-backup' };
+    }
+    // No sidecar AND no usable backup — genuinely nothing to restore. Back to empty, and clear
+    // any present-but-unusable sidecar/backup so nothing is orphaned (matching removed-collect).
     backupOnce(env, deps, state);
     const next = { ...base };
     delete next.statusLine;

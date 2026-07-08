@@ -23,9 +23,11 @@ It prints one JSON line with `action`. Report accordingly, then tell the user to
 restart Claude Code** if anything changed:
 
 - `restored-original` — your original statusline is back; the sidecar and backup were removed.
+- `restored-from-backup` — the sidecar was lost, but your original statusline was recovered from
+  the `0600` full-file backup and written back; the sidecar and backup were removed.
 - `removed-collect` — claude-context's own collector was removed; the slot is empty again.
-- `coexist-no-sidecar-removed` — our wrapper was wired but the stored original was missing, so
-  we removed our entry (slot empty). Nothing else to restore.
+- `coexist-no-sidecar-removed` — our wrapper was wired but neither the sidecar nor the backup
+  held a recoverable original, so we removed our entry (slot empty). Nothing else to restore.
 - `not-ours` — the slot no longer carries our marker (another tool or you changed it); we did
   **not** touch it. If `storedOriginalPreview` is shown, that is the statusline we had
   preserved (its file is given in `sidecarPath`) — restore it by hand if you want it back, then

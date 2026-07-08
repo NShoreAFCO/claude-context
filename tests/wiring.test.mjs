@@ -404,9 +404,28 @@ test('teardown: nothing of ours wired → idempotent no-op', () => {
   assert.equal(teardown({ env: { CLAUDE_CONFIG_DIR: mkCfg() } }).action, 'noop-nothing-wired');
 });
 
-test('teardown: coexist marker but sidecar lost → removes our statusLine entry, preserves siblings, drops backup', () => {
+test('teardown: coexist marker, sidecar lost, backup holds the original → restores it (C1)', () => {
+  const cfg = mkCfg();
+  const ORIGINAL = { type: 'command', command: 'my-statusline.sh --foo' };
+  writeSettings(cfg, { model: 'opus', statusLine: { type: 'command', command: COEXIST } });
+  // The 0600 backup is a verbatim copy of the pre-setup settings.json, so it still holds the
+  // user's original statusLine even after the sidecar is lost. It must NOT be deleted blindly.
+  fs.writeFileSync(
+    path.join(cfg, 'settings.json.claude-context.bak'),
+    JSON.stringify({ model: 'opus', statusLine: ORIGINAL }),
+  );
+  const r = teardown({ env: { CLAUDE_CONFIG_DIR: cfg } });
+  assert.equal(r.action, 'restored-from-backup');
+  const settings = readSettingsFile(cfg);
+  assert.deepEqual(settings.statusLine, ORIGINAL, 'original statusLine recovered from the backup');
+  assert.equal(settings.model, 'opus', 'sibling keys survive');
+  assert.equal(fs.existsSync(path.join(cfg, 'settings.json.claude-context.bak')), false, 'backup consumed');
+});
+
+test('teardown: coexist marker, sidecar lost AND backup has no original → removes our entry, drops backup', () => {
   const cfg = mkCfg();
   writeSettings(cfg, { model: 'opus', statusLine: { type: 'command', command: COEXIST } });
+  // A backup with no statusLine holds nothing to restore, so dropping it is correct.
   fs.writeFileSync(path.join(cfg, 'settings.json.claude-context.bak'), '{}');
   const r = teardown({ env: { CLAUDE_CONFIG_DIR: cfg } });
   assert.equal(r.action, 'coexist-no-sidecar-removed');
