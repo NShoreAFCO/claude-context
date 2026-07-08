@@ -6,6 +6,6 @@
   "license": "MIT",
   "homepage": "https://github.com/Ovid/claude-context",
   "repository": "https://github.com/Ovid/claude-context",
-  "commands": ["./commands/setup.md"],
+  "commands": ["./commands/setup.md", "./commands/teardown.md"],
   "keywords": ["context", "usage", "rate-limits", "statusline", "claude-code", "telemetry"]
 }

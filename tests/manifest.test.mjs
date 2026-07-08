@@ -16,6 +16,12 @@ test('plugin.json has required fields', () => {
   assert.equal(m.skills, undefined, 'no skills field so root SKILL.md auto-loads');
 });
 
+test('plugin.json registers both setup and teardown commands', () => {
+  const m = readJson('plugins/claude-context/.claude-plugin/plugin.json');
+  assert.ok(m.commands.includes('./commands/setup.md'));
+  assert.ok(m.commands.includes('./commands/teardown.md'));
+});
+
 test('marketplace.json points at this plugin', () => {
   const m = readJson('.claude-plugin/marketplace.json');
   assert.equal(m.name, 'claude-context');
