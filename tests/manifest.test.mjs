@@ -21,7 +21,7 @@ test('marketplace.json points at this plugin', () => {
   assert.equal(m.name, 'claude-context');
   assert.equal(m.plugins[0].name, 'claude-context');
   assert.equal(m.plugins[0].source, './plugins/claude-context');
-  assert.match(m.version, /^\d+\.\d+\.\d+$/);   // top-level (canonical) — NOT metadata.version
+  assert.match(m.version, /^\d+\.\d+\.\d+$/); // top-level (canonical) — NOT metadata.version
   assert.equal(typeof m.description, 'string'); // top-level (canonical) — NOT metadata.description
 });
 

@@ -8,16 +8,24 @@ import { lastAssistantUsage, countCompactions } from './lib/transcript.mjs';
 import { usedTokens, percentage, headroom } from './lib/token-math.mjs';
 import { formatDuration, clockHM } from './lib/time.mjs';
 
-function numOrNull(v) { return typeof v === 'number' && Number.isFinite(v) ? v : null; }
+function numOrNull(v) {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
 
 function isProviderModel(id, env = process.env) {
   const s = String(id ?? '').toLowerCase();
   if (s.includes('anthropic.claude-')) return true; // Bedrock model ids
-  if (s.includes('@')) return true;                 // Vertex uses '@' as version separator
+  if (s.includes('@')) return true; // Vertex uses '@' as version separator
   return env?.CLAUDE_CODE_USE_BEDROCK === '1' || env?.CLAUDE_CODE_USE_VERTEX === '1';
 }
 
-export function resolveReport({ now, sessionId = null, snapshotDir: dir, deps = fs, env = process.env }) {
+export function resolveReport({
+  now,
+  sessionId = null,
+  snapshotDir: dir,
+  deps = fs,
+  env = process.env,
+}) {
   // 1. Prefer THIS session's own keyed snapshot; else the newest in the dir.
   let read = null;
   let identified = false;
@@ -47,7 +55,10 @@ export function resolveReport({ now, sessionId = null, snapshotDir: dir, deps = 
     // value; only context carries snapshot_age_seconds. This is by design, not drift.
     const compactions = s.transcript_path ? countCompactions(s.transcript_path, deps) : 0;
     let rateLimitsStatus = 'available';
-    if (!s.rate_limits) rateLimitsStatus = isProviderModel(s.model?.id, env) ? 'unavailable_provider' : 'unavailable_plan';
+    if (!s.rate_limits)
+      rateLimitsStatus = isProviderModel(s.model?.id, env)
+        ? 'unavailable_provider'
+        : 'unavailable_plan';
     return {
       source: 'collector',
       model: s.model ?? {},
@@ -101,7 +112,8 @@ export function resolveReport({ now, sessionId = null, snapshotDir: dir, deps = 
   // Read the transcript's latest usage ONLY when the snapshot supplied a real window
   // to size it against (§2.1). Without a real window we never infer — we fall back to
   // the snapshot's own context field below.
-  const usage = knownWindow > 0 && staleTranscript ? lastAssistantUsage(staleTranscript, deps) : null;
+  const usage =
+    knownWindow > 0 && staleTranscript ? lastAssistantUsage(staleTranscript, deps) : null;
 
   if (usage) {
     const used = usedTokens(usage);
@@ -189,19 +201,27 @@ function windowJson(w, now) {
 
 function buildJson(r, now) {
   const c = r.context;
-  const context = c ? {
-    used_percentage: c.used_percentage,
-    used_tokens: c.used_tokens,
-    window_size: c.window_size,
-    headroom_tokens: headroom(c.used_tokens, c.window_size),
-    input_tokens: c.input_tokens,
-    cache_read_tokens: c.cache_read_tokens,
-    cache_creation_tokens: c.cache_creation_tokens,
-    output_tokens: c.output_tokens,
-  } : {
-    used_percentage: null, used_tokens: null, window_size: null, headroom_tokens: null,
-    input_tokens: null, cache_read_tokens: null, cache_creation_tokens: null, output_tokens: null,
-  };
+  const context = c
+    ? {
+        used_percentage: c.used_percentage,
+        used_tokens: c.used_tokens,
+        window_size: c.window_size,
+        headroom_tokens: headroom(c.used_tokens, c.window_size),
+        input_tokens: c.input_tokens,
+        cache_read_tokens: c.cache_read_tokens,
+        cache_creation_tokens: c.cache_creation_tokens,
+        output_tokens: c.output_tokens,
+      }
+    : {
+        used_percentage: null,
+        used_tokens: null,
+        window_size: null,
+        headroom_tokens: null,
+        input_tokens: null,
+        cache_read_tokens: null,
+        cache_creation_tokens: null,
+        output_tokens: null,
+      };
   const json = {
     model: r.model ?? {},
     context,
@@ -251,7 +271,8 @@ function rlLine(label, r, w, now) {
 }
 
 function sessionNote(r) {
-  if (r.sessionSelection === 'unverified-snapshot') return ' · session: unverified (newest snapshot)';
+  if (r.sessionSelection === 'unverified-snapshot')
+    return ' · session: unverified (newest snapshot)';
   return '';
 }
 
@@ -261,10 +282,12 @@ function sourceLine(r) {
     return `Source: collector · snapshot ${r.snapshotAgeSeconds}s old${stale}${sessionNote(r)}`;
   }
   if (r.source === 'transcript') {
-    const age = r.snapshotAgeSeconds != null ? ` · snapshot ${r.snapshotAgeSeconds}s old (stale)` : '';
+    const age =
+      r.snapshotAgeSeconds != null ? ` · snapshot ${r.snapshotAgeSeconds}s old (stale)` : '';
     // The transcript branch always stamps session_id or unverified-snapshot (report.mjs
     // resolves sessionSelection from `identified`), so these two cases are exhaustive.
-    const sess = r.sessionSelection === 'session_id' ? 'this session' : 'unverified (newest snapshot)';
+    const sess =
+      r.sessionSelection === 'session_id' ? 'this session' : 'unverified (newest snapshot)';
     return `Source: transcript fallback · context only · window from snapshot${age} · session: ${sess}`;
   }
   return 'Source: unavailable';
@@ -277,13 +300,19 @@ function buildHuman(r, now) {
   if (c && c.used_percentage == null) {
     lines.push('Context: unavailable — window size not reported yet');
   } else if (c) {
-    lines.push(`Context: ${c.used_percentage}% used · ${kt(c.used_tokens)} / ${kt(c.window_size)} tokens · ${kt(headroom(c.used_tokens, c.window_size))} headroom`);
+    lines.push(
+      `Context: ${c.used_percentage}% used · ${kt(c.used_tokens)} / ${kt(c.window_size)} tokens · ${kt(headroom(c.used_tokens, c.window_size))} headroom`,
+    );
   } else {
-    lines.push('Context: unavailable — no measurement yet (no assistant turn recorded, collector off)');
+    lines.push(
+      'Context: unavailable — no measurement yet (no assistant turn recorded, collector off)',
+    );
   }
   lines.push(rlLine('Session (5h)', r, r.rateLimits?.five_hour, now));
   lines.push(rlLine('Weekly (7d)', r, r.rateLimits?.seven_day, now));
-  lines.push(`Cost: ${r.cost != null ? `$${r.cost.toFixed(2)}` : 'unavailable'} · Compactions: ${r.compactions}`);
+  lines.push(
+    `Cost: ${r.cost != null ? `$${r.cost.toFixed(2)}` : 'unavailable'} · Compactions: ${r.compactions}`,
+  );
   lines.push(sourceLine(r));
   return lines.join('\n');
 }
@@ -297,7 +326,11 @@ if (isMain) {
   const now = Date.now();
   const sessionId = resolveSessionId({ argv: process.argv, env: process.env });
   const resolution = resolveReport({
-    now, sessionId, snapshotDir: snapshotDir(process.env), deps: fs, env: process.env,
+    now,
+    sessionId,
+    snapshotDir: snapshotDir(process.env),
+    deps: fs,
+    env: process.env,
   });
   const { human, json } = assembleReport(resolution, now);
   process.stdout.write(`${human}\n\n`);

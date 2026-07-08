@@ -11,14 +11,22 @@ function readJsonl(filePath, deps) {
   for (const line of raw.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    try { out.push(JSON.parse(trimmed)); } catch { /* skip malformed lines */ }
+    try {
+      out.push(JSON.parse(trimmed));
+    } catch {
+      /* skip malformed lines */
+    }
   }
   return out;
 }
 
 export function lastAssistantUsage(filePath, deps = fs) {
   let entries;
-  try { entries = readJsonl(filePath, deps); } catch { return null; }
+  try {
+    entries = readJsonl(filePath, deps);
+  } catch {
+    return null;
+  }
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i];
     const usage = e?.message?.usage ?? e?.usage;
@@ -28,8 +36,12 @@ export function lastAssistantUsage(filePath, deps = fs) {
         cache_read_input_tokens: num(usage.cache_read_input_tokens),
         cache_creation_input_tokens: num(usage.cache_creation_input_tokens),
         output_tokens: num(usage.output_tokens),
-        model_id: typeof e?.message?.model === 'string' ? e.message.model
-          : (typeof e?.model === 'string' ? e.model : null),
+        model_id:
+          typeof e?.message?.model === 'string'
+            ? e.message.model
+            : typeof e?.model === 'string'
+              ? e.model
+              : null,
       };
     }
   }
@@ -38,7 +50,11 @@ export function lastAssistantUsage(filePath, deps = fs) {
 
 export function countCompactions(filePath, deps = fs) {
   let entries;
-  try { entries = readJsonl(filePath, deps); } catch { return 0; }
+  try {
+    entries = readJsonl(filePath, deps);
+  } catch {
+    return 0;
+  }
   let count = 0;
   for (const e of entries) {
     const isBoundary = e?.type === 'compact_boundary' || e?.subtype === 'compact_boundary';

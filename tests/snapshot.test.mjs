@@ -4,13 +4,23 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { writeSnapshot, readSnapshot, findNewestSnapshot, listSnapshotsByMtime, FRESHNESS_MS } from '../plugins/claude-context/scripts/lib/snapshot.mjs';
+import {
+  writeSnapshot,
+  readSnapshot,
+  findNewestSnapshot,
+  listSnapshotsByMtime,
+  FRESHNESS_MS,
+} from '../plugins/claude-context/scripts/lib/snapshot.mjs';
 
 function tmpFile() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-'));
   return path.join(dir, 'nested', 'snapshot.json');
 }
-const snap = (extra = {}) => ({ updated_at: new Date(1000).toISOString(), context: { used_percentage: 46 }, ...extra });
+const snap = (extra = {}) => ({
+  updated_at: new Date(1000).toISOString(),
+  context: { used_percentage: 46 },
+  ...extra,
+});
 
 test('writeSnapshot writes atomically with 0600 and creates dirs', () => {
   const p = tmpFile();
@@ -64,7 +74,10 @@ test('writeSnapshot skips unchanged content within throttle window', () => {
   const p = tmpFile();
   writeSnapshot(p, snap(), { now: 1000 });
   // same content (ignoring updated_at), 10s later, still within 30s throttle
-  assert.equal(writeSnapshot(p, snap({ updated_at: new Date(11000).toISOString() }), { now: 11000 }), 'skipped');
+  assert.equal(
+    writeSnapshot(p, snap({ updated_at: new Date(11000).toISOString() }), { now: 11000 }),
+    'skipped',
+  );
 });
 
 test('writeSnapshot reports "failed" (not "skipped") on a write error even when a stale snapshot is on disk', () => {
@@ -75,16 +88,24 @@ test('writeSnapshot reports "failed" (not "skipped") on a write error even when 
   const p = path.join(base, 'snapshot.json');
   fs.writeFileSync(p, JSON.stringify(snap())); // a prior snapshot sits on disk
   const deps = {
-    existsSync: () => true,           // stale file present...
+    existsSync: () => true, // stale file present...
     statSync: () => ({ mtimeMs: 0 }), // ...but old enough to force a rewrite attempt
     readFileSync: fs.readFileSync,
     mkdirSync: () => {},
     chmodSync: () => {},
-    writeFileSync: () => { throw new Error('EROFS: read-only file system'); },
+    writeFileSync: () => {
+      throw new Error('EROFS: read-only file system');
+    },
     renameSync: () => {},
     unlinkSync: () => {},
   };
-  assert.equal(writeSnapshot(p, snap({ updated_at: new Date(9_999_999).toISOString() }), { now: 9_999_999, deps }), 'failed');
+  assert.equal(
+    writeSnapshot(p, snap({ updated_at: new Date(9_999_999).toISOString() }), {
+      now: 9_999_999,
+      deps,
+    }),
+    'failed',
+  );
 });
 
 test('writeSnapshot keeps the snapshot dir private (0700), tightening a pre-existing 0755 dir', () => {
@@ -159,10 +180,18 @@ test('writeSnapshot cleans up its temp file when the atomic rename fails', () =>
     mkdirSync: fs.mkdirSync,
     chmodSync: () => {},
     writeFileSync: fs.writeFileSync,
-    renameSync: () => { throw new Error('rename boom'); },
-    unlinkSync: (f) => { unlinked.push(f); fs.unlinkSync(f); },
+    renameSync: () => {
+      throw new Error('rename boom');
+    },
+    unlinkSync: (f) => {
+      unlinked.push(f);
+      fs.unlinkSync(f);
+    },
   };
   assert.equal(writeSnapshot(p, snap(), { now: 1000, deps }), 'failed');
   assert.equal(unlinked.length, 1); // the temp file was removed
-  assert.deepEqual(fs.readdirSync(dir).filter((f) => f.includes('.tmp')), []); // none orphaned
+  assert.deepEqual(
+    fs.readdirSync(dir).filter((f) => f.includes('.tmp')),
+    [],
+  ); // none orphaned
 });

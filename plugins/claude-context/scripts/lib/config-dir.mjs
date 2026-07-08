@@ -43,8 +43,14 @@ export function resolveSessionId({ argv = [], env = {} } = {}) {
   let val = null;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--session-id') { val = argv[i + 1] ?? null; break; }
-    if (typeof a === 'string' && a.startsWith('--session-id=')) { val = a.slice('--session-id='.length); break; }
+    if (a === '--session-id') {
+      val = argv[i + 1] ?? null;
+      break;
+    }
+    if (typeof a === 'string' && a.startsWith('--session-id=')) {
+      val = a.slice('--session-id='.length);
+      break;
+    }
   }
   if (val == null) val = env.CLAUDE_CODE_SESSION_ID ?? null;
   if (typeof val !== 'string') return null;

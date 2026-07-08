@@ -5,13 +5,23 @@ import { epochToMs } from './lib/time.mjs';
 import { writeSnapshot } from './lib/snapshot.mjs';
 import { snapshotPath } from './lib/config-dir.mjs';
 
-function num(v) { return typeof v === 'number' && Number.isFinite(v) ? v : 0; }
-function str(v) { return typeof v === 'string' ? v : ''; }
-function numOrNull(v) { return typeof v === 'number' && Number.isFinite(v) ? v : null; }
-function roundPct(v) { return typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null; }
+function num(v) {
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+}
+function str(v) {
+  return typeof v === 'string' ? v : '';
+}
+function numOrNull(v) {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+function roundPct(v) {
+  return typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null;
+}
 // Native context percentage, treating 0/non-finite as "not yet populated" (see
 // Global Constraints). Rate-limit windows keep 0 as valid and use roundPct instead.
-function nativePctOrNull(v) { return typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : null; }
+function nativePctOrNull(v) {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : null;
+}
 
 function buildWindow(w) {
   if (!w || typeof w !== 'object') return null;
@@ -68,10 +78,21 @@ async function readStdin() {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-export async function runCli({ argv = process.argv, now = Date.now(), readInput = readStdin, env = process.env, deps = fs, write = (s) => process.stdout.write(s) } = {}) {
+export async function runCli({
+  argv = process.argv,
+  now = Date.now(),
+  readInput = readStdin,
+  env = process.env,
+  deps = fs,
+  write = (s) => process.stdout.write(s),
+} = {}) {
   const silent = argv.includes('--silent');
   let stdin;
-  try { stdin = JSON.parse(await readInput()); } catch { stdin = {}; }
+  try {
+    stdin = JSON.parse(await readInput());
+  } catch {
+    stdin = {};
+  }
   const snapshot = buildSnapshot(stdin, now);
   // Key by this session's id (from stdin) so concurrent same-account sessions each
   // write their own file instead of thrashing one shared snapshot.
@@ -83,11 +104,16 @@ export async function runCli({ argv = process.argv, now = Date.now(), readInput 
   // plain existsSync check would misread as healthy) and stays quiet on a throttle
   // 'skipped', where the prior snapshot is intentionally left in place.
   const writeResult = writeSnapshot(snapPath, snapshot, { now, deps });
-  const line = writeResult === 'failed' ? `${compactLine(snapshot)} · snapshot not saved` : compactLine(snapshot);
+  const line =
+    writeResult === 'failed'
+      ? `${compactLine(snapshot)} · snapshot not saved`
+      : compactLine(snapshot);
   if (!silent) write(`${line}\n`);
 }
 
 // Importing this module does not run the collector — only direct execution does.
 // The Windows launcher (Task 11) imports the module and calls runCli() explicitly.
 const isMain = import.meta.url === pathToFileURL(process.argv[1] ?? '').href;
-if (isMain) { await runCli(); }
+if (isMain) {
+  await runCli();
+}

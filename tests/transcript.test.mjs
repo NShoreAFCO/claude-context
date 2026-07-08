@@ -2,7 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { lastAssistantUsage, countCompactions } from '../plugins/claude-context/scripts/lib/transcript.mjs';
+import {
+  lastAssistantUsage,
+  countCompactions,
+} from '../plugins/claude-context/scripts/lib/transcript.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const session = path.join(here, 'fixtures', 'session.jsonl');
@@ -31,7 +34,12 @@ const real = path.join(here, 'fixtures', 'real-transcript.jsonl');
 test('golden: a real transcript parses to the expected shape', () => {
   const u = lastAssistantUsage(real);
   assert.ok(u, 'a real transcript has at least one assistant turn with usage');
-  for (const k of ['input_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens', 'output_tokens']) {
+  for (const k of [
+    'input_tokens',
+    'cache_read_input_tokens',
+    'cache_creation_input_tokens',
+    'output_tokens',
+  ]) {
     assert.equal(typeof u[k], 'number');
     assert.ok(Number.isFinite(u[k]));
   }

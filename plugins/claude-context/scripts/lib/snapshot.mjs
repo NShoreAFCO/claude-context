@@ -38,16 +38,29 @@ export function writeSnapshot(snapshotPath, snapshot, { now = Date.now(), deps =
     deps.mkdirSync(dir, { recursive: true, mode: 0o700 });
     // mkdir's mode only applies to dirs it creates; tighten one an older version
     // (or a different umask) may have left world-traversable. Best-effort.
-    try { deps.chmodSync(dir, 0o700); } catch { /* not ours to chmod; the 0600 file still protects content */ }
+    try {
+      deps.chmodSync(dir, 0o700);
+    } catch {
+      /* not ours to chmod; the 0600 file still protects content */
+    }
     if (!shouldWrite(snapshotPath, snapshot, now, deps)) return 'skipped';
     tmp = path.join(dir, `.${path.basename(snapshotPath)}.${process.pid}.${now}.tmp`);
-    deps.writeFileSync(tmp, `${JSON.stringify(snapshot, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+    deps.writeFileSync(tmp, `${JSON.stringify(snapshot, null, 2)}\n`, {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
     deps.renameSync(tmp, snapshotPath);
     deps.chmodSync(snapshotPath, 0o600);
     return 'written';
   } catch {
     // Don't leak a temp file per tick when rename/chmod persistently fails.
-    if (tmp) { try { deps.unlinkSync(tmp); } catch { /* already gone */ } }
+    if (tmp) {
+      try {
+        deps.unlinkSync(tmp);
+      } catch {
+        /* already gone */
+      }
+    }
     return 'failed';
   }
 }
@@ -58,13 +71,21 @@ export function writeSnapshot(snapshotPath, snapshot, { now = Date.now(), deps =
 // not-set-up state (it would falsely tell them to run setup).
 export function listSnapshotsByMtime(dir, { deps = fs } = {}) {
   let files;
-  try { files = deps.readdirSync(dir); } catch { return []; }
+  try {
+    files = deps.readdirSync(dir);
+  } catch {
+    return [];
+  }
   const found = [];
   for (const f of files) {
     if (!f.startsWith('snapshot') || !f.endsWith('.json')) continue; // skips dot-prefixed .tmp files
     const full = path.join(dir, f);
     let mtime;
-    try { mtime = deps.statSync(full).mtimeMs; } catch { continue; }
+    try {
+      mtime = deps.statSync(full).mtimeMs;
+    } catch {
+      continue;
+    }
     found.push({ full, mtime });
   }
   found.sort((a, b) => b.mtime - a.mtime);
@@ -78,7 +99,10 @@ export function findNewestSnapshot(dir, { deps = fs } = {}) {
   return listSnapshotsByMtime(dir, { deps })[0] ?? null;
 }
 
-export function readSnapshot(snapshotPath, { now = Date.now(), freshnessMs = FRESHNESS_MS, deps = fs } = {}) {
+export function readSnapshot(
+  snapshotPath,
+  { now = Date.now(), freshnessMs = FRESHNESS_MS, deps = fs } = {},
+) {
   try {
     const snapshot = JSON.parse(deps.readFileSync(snapshotPath, 'utf8'));
     const updatedMs = Date.parse(snapshot?.updated_at);
@@ -86,7 +110,11 @@ export function readSnapshot(snapshotPath, { now = Date.now(), freshnessMs = FRE
     const ageMs = now - updatedMs;
     // Present + parseable always returns; `fresh` distinguishes stale from absent
     // so the report can render `unavailable_stale` and reuse the real window_size.
-    return { snapshot, ageSeconds: Math.max(0, Math.round(ageMs / 1000)), fresh: ageMs <= freshnessMs };
+    return {
+      snapshot,
+      ageSeconds: Math.max(0, Math.round(ageMs / 1000)),
+      fresh: ageMs <= freshnessMs,
+    };
   } catch {
     return null;
   }

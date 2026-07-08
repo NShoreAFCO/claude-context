@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const setup = readFileSync(path.join(root, 'plugins', 'claude-context', 'commands', 'setup.md'), 'utf8');
+const setup = readFileSync(
+  path.join(root, 'plugins', 'claude-context', 'commands', 'setup.md'),
+  'utf8',
+);
 
 test('wires the collector, not the HUD', () => {
   assert.match(setup, /scripts\/collect\.mjs/);
