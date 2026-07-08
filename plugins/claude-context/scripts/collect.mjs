@@ -1,28 +1,21 @@
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { usedTokens, percentage } from './lib/token-math.mjs';
+import { usedTokens, percentage, num, numOrNull } from './lib/token-math.mjs';
 import { epochToMs } from './lib/time.mjs';
 import { writeSnapshot } from './lib/snapshot.mjs';
 import { snapshotPath } from './lib/config-dir.mjs';
 import { readStdin, parseStdinJson } from './lib/stdin.mjs';
 
-function num(v) {
-  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
-}
 function str(v) {
   return typeof v === 'string' ? v : '';
-}
-function numOrNull(v) {
-  return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 function roundPct(v) {
   return typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null;
 }
-// Native context percentage, treating 0/non-finite as "not yet populated" (see
-// Global Constraints). Rate-limit windows keep 0 as valid and use roundPct instead.
-function nativePctOrNull(v) {
-  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : null;
-}
+// Native context percentage, treating 0/non-finite as "not yet populated" (see Global
+// Constraints). roundPct already guards type+finite, so the only added rule is `> 0`.
+// Rate-limit windows keep 0 as valid and use roundPct directly.
+const nativePctOrNull = (v) => (v > 0 ? roundPct(v) : null);
 
 function buildWindow(w) {
   if (!w || typeof w !== 'object') return null;
@@ -106,5 +99,12 @@ export async function runCli({
 // The Windows launcher (Task 11) imports the module and calls runCli() explicitly.
 const isMain = import.meta.url === pathToFileURL(process.argv[1] ?? '').href;
 if (isMain) {
-  await runCli();
+  // Fail safe, matching coexist.mjs: a synchronous throw (e.g. ERR_STREAM_DESTROYED writing
+  // to an already-closed statusline pipe) must not surface as an unhandled rejection — one
+  // blank tick, recovered next tick.
+  try {
+    await runCli();
+  } catch {
+    process.exit(0);
+  }
 }

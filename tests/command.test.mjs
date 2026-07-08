@@ -8,29 +8,17 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { buildStatuslineCommand } from '../plugins/claude-context/scripts/lib/command.mjs';
 import { detectMarker } from '../plugins/claude-context/scripts/lib/marker.mjs';
 
-test('marker round-trips through the built command, for both variants and platforms', () => {
-  for (const platform of ['posix', 'gitbash']) {
+test('marker round-trips through the built command, for both variants', () => {
+  for (const variant of ['collect', 'coexist']) {
     assert.equal(
-      detectMarker(
-        buildStatuslineCommand({ variant: 'collect', runtime: '/usr/bin/node', platform }),
-      ),
-      'collect',
-    );
-    assert.equal(
-      detectMarker(
-        buildStatuslineCommand({ variant: 'coexist', runtime: '/usr/bin/node', platform }),
-      ),
-      'coexist',
+      detectMarker(buildStatuslineCommand({ variant, runtime: '/usr/bin/node' })),
+      variant,
     );
   }
 });
 
 test('the built command targets the right script and is a single bash -c string', () => {
-  const cmd = buildStatuslineCommand({
-    variant: 'coexist',
-    runtime: '/usr/bin/node',
-    platform: 'posix',
-  });
+  const cmd = buildStatuslineCommand({ variant: 'coexist', runtime: '/usr/bin/node' });
   assert.match(cmd, /^bash -c '/);
   assert.match(cmd, /scripts\/coexist\.mjs/);
 });
@@ -40,22 +28,13 @@ test('bad inputs throw', () => {
   assert.throws(() => buildStatuslineCommand({ variant: 'collect', runtime: '' }));
 });
 
-test('Git Bash resolves the newest version by version field, same as POSIX (no cache-id sort bug)', () => {
-  const gb = buildStatuslineCommand({
-    variant: 'collect',
-    runtime: '/usr/bin/node',
-    platform: 'gitbash',
-  });
-  const px = buildStatuslineCommand({
-    variant: 'collect',
-    runtime: '/usr/bin/node',
-    platform: 'posix',
-  });
+test('version resolution sorts by version field, not whole-line (no cache-id sort bug, I1)', () => {
+  const cmd = buildStatuslineCommand({ variant: 'collect', runtime: '/usr/bin/node' });
   // A whole-line `sort -V` orders by the cache-id dir that precedes the version, so it could
-  // launch an older version. Both platforms must use the awk version-field sort instead (I1).
-  assert.equal(gb, px, 'gitbash must not diverge to a whole-line sort -V');
-  assert.match(gb, /awk -F\//);
-  assert.doesNotMatch(gb, /sort -V/);
+  // launch an older version. The glob (identical on POSIX and Git Bash) must use the awk
+  // version-field sort instead (I1).
+  assert.match(cmd, /awk -F\//);
+  assert.doesNotMatch(cmd, /sort -V/);
 });
 
 test('a bun runtime gets --env-file /dev/null so it does not auto-load the project .env (I2)', () => {
@@ -78,7 +57,7 @@ test('runtime is not shell-injectable into the persisted command', () => {
     `$(touch ${path.join(dir, 'SUB')})`,
     `\`touch ${path.join(dir, 'BT')}\``,
   ]) {
-    const cmd = buildStatuslineCommand({ variant: 'collect', runtime: payload, platform: 'posix' });
+    const cmd = buildStatuslineCommand({ variant: 'collect', runtime: payload });
     spawnSync('bash', ['-c', cmd], {
       input: '{}',
       encoding: 'utf8',
@@ -99,7 +78,7 @@ test('a runtime path with a space still execs the target script', () => {
   const spaced = path.join(cfg, 'my runtime', 'node');
   fs.mkdirSync(path.dirname(spaced), { recursive: true });
   fs.writeFileSync(spaced, `#!/bin/sh\nexec "${process.execPath}" "$@"\n`, { mode: 0o755 });
-  const cmd = buildStatuslineCommand({ variant: 'collect', runtime: spaced, platform: 'posix' });
+  const cmd = buildStatuslineCommand({ variant: 'collect', runtime: spaced });
   const out = execFileSync('bash', ['-c', cmd], {
     input: '{}',
     env: { ...process.env, CLAUDE_CONFIG_DIR: cfg, HOME: cfg },
@@ -116,11 +95,7 @@ test('the built command resolves the newest plugin dir and execs the target scri
   const scriptDir = path.join(cfg, 'plugins', 'cache', 'mk', 'claude-context', '0.3.0', 'scripts');
   fs.mkdirSync(scriptDir, { recursive: true });
   fs.writeFileSync(path.join(scriptDir, 'coexist.mjs'), 'console.log("EXEC-OK");');
-  const cmd = buildStatuslineCommand({
-    variant: 'coexist',
-    runtime: process.execPath,
-    platform: 'posix',
-  });
+  const cmd = buildStatuslineCommand({ variant: 'coexist', runtime: process.execPath });
   const out = execFileSync('bash', ['-c', cmd], {
     input: '{}',
     env: { ...process.env, CLAUDE_CONFIG_DIR: cfg, HOME: cfg },

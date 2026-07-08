@@ -67,6 +67,22 @@ test('resolveSessionId: --session-id arg wins, then env, else null; placeholders
     resolveSessionId({ argv: ['node', 'r', '--session-id', '${CLAUDE_SESSION_ID}'], env: {} }),
     null,
   );
+  // I1: an UNUSABLE arg (unsubstituted template, or bash-expanded empty string) must not
+  // short-circuit the chain — it falls THROUGH to the env var that older builds still export.
+  assert.equal(
+    resolveSessionId({
+      argv: ['node', 'r', '--session-id', '${CLAUDE_SESSION_ID}'],
+      env: { CLAUDE_CODE_SESSION_ID: 'sid-env' },
+    }),
+    'sid-env',
+  );
+  assert.equal(
+    resolveSessionId({
+      argv: ['node', 'r', '--session-id', ''],
+      env: { CLAUDE_CODE_SESSION_ID: 'sid-env' },
+    }),
+    'sid-env',
+  );
 });
 
 test('sidecarPath is coexist.json under claude-context', () => {

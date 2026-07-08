@@ -7,7 +7,6 @@ import path from 'node:path';
 import {
   writeSnapshot,
   readSnapshot,
-  findNewestSnapshot,
   listSnapshotsByMtime,
   FRESHNESS_MS,
 } from '../plugins/claude-context/scripts/lib/snapshot.mjs';
@@ -125,17 +124,6 @@ test('writeSnapshot keeps the snapshot dir private (0700), tightening a pre-exis
   assert.equal(fs.statSync(dir2).mode & 0o777, 0o700);
 });
 
-test('findNewestSnapshot returns the newest snapshot-*.json, ignoring temp and non-snapshot files', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-newest-'));
-  fs.writeFileSync(path.join(dir, 'snapshot-a.json'), '{}');
-  fs.writeFileSync(path.join(dir, 'snapshot-b.json'), '{}');
-  fs.writeFileSync(path.join(dir, '.snapshot-b.json.42.99.tmp'), '{}'); // in-flight temp: ignored
-  fs.writeFileSync(path.join(dir, 'notes.txt'), 'x'); // not a snapshot: ignored
-  const future = Math.floor(Date.now() / 1000) + 100;
-  fs.utimesSync(path.join(dir, 'snapshot-b.json'), future, future); // make b newest
-  assert.equal(findNewestSnapshot(dir), path.join(dir, 'snapshot-b.json'));
-});
-
 test('listSnapshotsByMtime returns every snapshot-*.json newest-first, including as-yet-unparsed ones, skipping temp/non-snapshot files', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-list-'));
   fs.writeFileSync(path.join(dir, 'snapshot-a.json'), '{}');
@@ -159,13 +147,6 @@ test('listSnapshotsByMtime returns [] for a missing or snapshot-free dir', () =>
   const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-list-empty-'));
   fs.writeFileSync(path.join(empty, 'notes.txt'), 'x');
   assert.deepEqual(listSnapshotsByMtime(empty), []);
-});
-
-test('findNewestSnapshot returns null for a missing or snapshot-free dir', () => {
-  assert.equal(findNewestSnapshot('/no/such/dir'), null);
-  const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-empty-'));
-  fs.writeFileSync(path.join(empty, 'notes.txt'), 'x');
-  assert.equal(findNewestSnapshot(empty), null);
 });
 
 test('writeSnapshot cleans up its temp file when the atomic rename fails', () => {

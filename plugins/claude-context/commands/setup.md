@@ -36,7 +36,8 @@ Runtime: on macOS/Linux prefer `bun` then `node`
 (`command -v bun 2>/dev/null || command -v node 2>/dev/null`); on Git Bash require `node`
 (`command -v node`). If none is found, stop and tell the user to install Node.js LTS
 (https://nodejs.org/), restart the shell, and re-run `/claude-context:setup`. Record the
-resolved path as `{RUNTIME_PATH}` and the branch (`posix` / `gitbash`) as `{PLATFORM}`.
+resolved path as `{RUNTIME_PATH}`. (The `posix` / `gitbash` branch only gates the
+native-PowerShell stop above; the wiring module needs no platform argument.)
 
 ## Step 2: Detect the current slot
 
@@ -86,7 +87,7 @@ The detector prints one JSON line: `{ "slot", "preview", "hasSidecar", "sidecarM
 ## Step 4: Apply via the wiring module
 
 ```bash
-"{RUNTIME_PATH}" "{PLUGIN_DIR}scripts/wiring.mjs" wrap --runtime "{RUNTIME_PATH}" --platform {PLATFORM}
+"{RUNTIME_PATH}" "{PLUGIN_DIR}scripts/wiring.mjs" wrap --runtime "{RUNTIME_PATH}"
 ```
 
 It writes exactly one `0600` full-file `settings.json.claude-context.bak` before its first

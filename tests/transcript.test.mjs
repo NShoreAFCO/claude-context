@@ -27,6 +27,9 @@ test('lastAssistantUsage returns null when no assistant turn / missing file', ()
 test('countCompactions counts only timestamped compact_boundary entries', () => {
   assert.equal(countCompactions(session), 1);
   assert.equal(countCompactions(empty), 0);
+  // A read failure (e.g. a since-rotated transcript_path) is UNKNOWN, not zero → null,
+  // so the report never prints a fabricated "Compactions: 0".
+  assert.equal(countCompactions(path.join(here, 'fixtures', 'nope.jsonl')), null);
 });
 
 const real = path.join(here, 'fixtures', 'real-transcript.jsonl');

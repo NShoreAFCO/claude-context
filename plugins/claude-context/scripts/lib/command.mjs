@@ -8,7 +8,9 @@ import { markerAssignment } from './marker.mjs';
 // with claude-context cached under two cache-ids it can launch an older version (I1). Git Bash
 // ships awk/grep/sort, and setup.md/teardown.md already run this exact form there.
 // ponytail: single resolver for both platforms; split again only if a target shell lacks awk.
-function globExpr() {
+// Exported so a test can assert setup.md/teardown.md embed this exact pipeline — the three
+// copies (this JS + two markdown) share no code path, so a drift guard is the only safety net.
+export function globExpr() {
   return [
     'plugin_dir=$(ls -d "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/claude-context/*/ 2>/dev/null',
     '| awk -F/ \'{ print $(NF-1) "\\t" $0 }\'',
@@ -22,11 +24,12 @@ function shSingleQuote(body) {
   return `'${body.replace(/'/g, `'"'"'`)}'`;
 }
 
-// `platform` is still accepted (setup.md passes it) but no longer selects a glob variant —
-// the resolver is platform-agnostic now. Kept in the object shape for the wrap()/CLI contract.
+// No `platform` knob: the version-resolution glob is identical on POSIX and Git Bash, so
+// there is nothing to select. Re-add one only if a target shell needs a different glob.
 export function buildStatuslineCommand({ variant, runtime }) {
-  if (variant !== 'collect' && variant !== 'coexist') throw new Error(`bad variant: ${variant}`);
   if (typeof runtime !== 'string' || runtime.trim() === '') throw new Error('runtime required');
+  // markerAssignment throws on any non-collect/coexist variant before it reaches the script
+  // path below, so no separate variant guard is needed here.
   const marker = markerAssignment(variant); // CLAUDE_CONTEXT_WRAPPER=<variant>
   // bun auto-loads the project's .env on every tick (cwd = project dir); a stray
   // CLAUDE_CONFIG_DIR or NODE_OPTIONS there would poison the collector. Neutralize it (I2).

@@ -19,10 +19,13 @@ provenance fields (`source`, `rate_limits_status`, `setup_required`,
 
 ## How to run it
 
-Run the report engine with Bash and read its output:
+Run the report engine with Bash and read its output. Resolve the runtime the same way
+setup/teardown do — prefer `bun`, fall back to `node` (the report is pure `node:` ESM and
+runs under either) — rather than assuming `node` is on PATH, since setup wires bun-only hosts:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/report.mjs" --session-id "${CLAUDE_SESSION_ID}"
+RT=$(command -v bun 2>/dev/null || command -v node 2>/dev/null)
+"$RT" "${CLAUDE_PLUGIN_ROOT}/scripts/report.mjs" --session-id "${CLAUDE_SESSION_ID}"
 ```
 
 Pass `--session-id` so the report reads **this** session's own snapshot rather than

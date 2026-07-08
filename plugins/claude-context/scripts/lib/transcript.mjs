@@ -1,9 +1,6 @@
 // Adapted from claude-hud (MIT, © Jarrod Watts): transcript JSONL parsing.
 import fs from 'node:fs';
-
-function num(v) {
-  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
-}
+import { num } from './token-math.mjs';
 
 function readJsonl(filePath, deps) {
   const raw = deps.readFileSync(filePath, 'utf8');
@@ -53,7 +50,10 @@ export function countCompactions(filePath, deps = fs) {
   try {
     entries = readJsonl(filePath, deps);
   } catch {
-    return 0;
+    // Unreadable transcript (e.g. a stale snapshot pointing at a since-rotated path): the
+    // count is UNKNOWN, not zero. Return null so the report never reports a fabricated 0 —
+    // the facts-only contract. (lastAssistantUsage already returns null on the same failure.)
+    return null;
   }
   let count = 0;
   for (const e of entries) {

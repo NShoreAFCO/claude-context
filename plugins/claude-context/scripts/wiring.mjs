@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { settingsPath, sidecarPath, backupPath } from './lib/config-dir.mjs';
+import { ensureDir, writeFileAtomic } from './lib/atomic-write.mjs';
 import { detectMarker } from './lib/marker.mjs';
 import { buildStatuslineCommand } from './lib/command.mjs';
 import { previewCommand } from './lib/redact.mjs';
@@ -89,42 +90,6 @@ export function detect({ env = process.env, deps = fs } = {}) {
   };
 }
 
-function ensureDir(dir, deps, { tighten = false } = {}) {
-  deps.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  // mkdir's mode only applies to a dir it creates; tighten an existing loose one (older
-  // version / umask). Only for our own subdir — never the user's top-level config dir.
-  if (tighten) {
-    try {
-      deps.chmodSync(dir, 0o700);
-    } catch {
-      /* not ours to chmod; the 0600 file still protects content */
-    }
-  }
-}
-
-// Write `data` to `tmp` then atomically rename it into `dest`, unlinking `tmp` on ANY
-// failure — a partial write on a full/flaky FS (ENOSPC) as well as a failed rename — so a
-// stray per-attempt temp is never left behind. The mode is applied at write time; the
-// trailing chmod is best-effort — it cannot un-commit an already-renamed file.
-function writeFileAtomic(deps, tmp, dest, data, mode) {
-  try {
-    deps.writeFileSync(tmp, data, { mode });
-    deps.renameSync(tmp, dest);
-  } catch (e) {
-    try {
-      deps.unlinkSync(tmp);
-    } catch {
-      /* already gone / never created */
-    }
-    throw e;
-  }
-  try {
-    deps.chmodSync(dest, mode);
-  } catch {
-    /* best-effort umask-defeat; the temp already carried the mode */
-  }
-}
-
 // Write the single stable 0600 backup — exactly once per run, and only if there was a file
 // to protect. Backs up state.rawOriginal (the bytes captured when this run first read
 // settings.json), NOT a fresh read a concurrent /setup could have already overwritten.
@@ -139,7 +104,7 @@ function backupOnce(env, deps, state) {
     // so the next fresh install starts clean.
     if (!deps.existsSync(bp)) {
       const tmp = `${bp}.${process.pid}.${state.now}.tmp`;
-      writeFileAtomic(deps, tmp, bp, state.rawOriginal, 0o600);
+      writeFileAtomic(tmp, bp, state.rawOriginal, 0o600, { deps });
     }
   }
   state.backedUp = true;
@@ -148,7 +113,7 @@ function backupOnce(env, deps, state) {
 function writeSettingsAtomic(env, deps, obj) {
   const sp = settingsPath(env);
   const dir = path.dirname(sp);
-  ensureDir(dir, deps);
+  ensureDir(dir, { deps });
   // Preserve the file's existing mode; default a new settings.json to 0600 (it may hold secrets).
   let mode = 0o600;
   try {
@@ -157,15 +122,15 @@ function writeSettingsAtomic(env, deps, obj) {
     /* new file */
   }
   const tmp = path.join(dir, `.settings.json.${process.pid}.${Date.now()}.tmp`);
-  writeFileAtomic(deps, tmp, sp, `${JSON.stringify(obj, null, 2)}\n`, mode);
+  writeFileAtomic(tmp, sp, `${JSON.stringify(obj, null, 2)}\n`, mode, { deps });
 }
 
 function writeSidecarAtomic(env, deps, obj) {
   const scp = sidecarPath(env);
   const dir = path.dirname(scp);
-  ensureDir(dir, deps, { tighten: true });
+  ensureDir(dir, { deps, tighten: true });
   const tmp = path.join(dir, `.coexist.json.${process.pid}.${Date.now()}.tmp`);
-  writeFileAtomic(deps, tmp, scp, `${JSON.stringify(obj, null, 2)}\n`, 0o600);
+  writeFileAtomic(tmp, scp, `${JSON.stringify(obj, null, 2)}\n`, 0o600, { deps });
 }
 
 // KNOWN RACE (accepted, unguarded by design): wrap() and teardown() are lock-free,
@@ -173,18 +138,16 @@ function writeSidecarAtomic(env, deps, obj) {
 // taken at its start and then writes without re-validating. If a concurrent /teardown runs
 // to completion between this run's initial read and its write, this run can act on a stale
 // classification (e.g. refresh an `ours-coexist` slot that teardown just restored to the
-// foreign original) and lose that original. Both are agent-invoked slash commands that are
-// rarely fired simultaneously on the same config dir, so the likelihood is low; the fix (an
+// foreign original) and lose that original. The same read→write window can also lose a
+// concurrent THIRD-PARTY write to settings.json — Claude Code persisting a `/config` change,
+// or a hand edit — that lands after this run's read: the whole-file rewrite here is built from
+// the stale in-memory copy, so that unrelated edit is silently dropped. Both our commands are
+// agent-invoked and rarely fired simultaneously, and a concurrent foreign write to the same
+// file in the sub-millisecond window is rarer still, so the likelihood is low; the fix (an
 // exclusive lockfile, or re-read + re-classify before the final write) was judged not worth
-// its stale-lock/complexity cost at this stage. If concurrent setup/teardown ever becomes
-// common, guard the mutation here.
-export function wrap({
-  env = process.env,
-  deps = fs,
-  now = Date.now(),
-  runtime,
-  platform = 'posix',
-} = {}) {
+// its stale-lock/complexity cost at this stage. If any of these races ever becomes common,
+// guard the mutation here.
+export function wrap({ env = process.env, deps = fs, now = Date.now(), runtime } = {}) {
   const sp = settingsPath(env);
   const { raw, exists, settings } = readSettings(sp, deps);
   if (settings === undefined && exists) return { action: 'error', reason: 'unparseable-settings' };
@@ -196,7 +159,7 @@ export function wrap({
   const setVariant = (variant) => {
     // Build (and thus validate runtime) BEFORE any disk write, so a bad runtime never leaves
     // a half-written backup/sidecar behind.
-    const command = buildStatuslineCommand({ variant, runtime, platform });
+    const command = buildStatuslineCommand({ variant, runtime });
     backupOnce(env, deps, state);
     writeSettingsAtomic(env, deps, {
       ...base,
@@ -235,7 +198,7 @@ export function wrap({
   }
   // Fresh foreign wrap: build the wrapper command FIRST (validates runtime before any write),
   // then back up, store the ORIGINAL (safe ordering), then wire coexist.
-  const wrapperCommand = buildStatuslineCommand({ variant: 'coexist', runtime, platform });
+  const wrapperCommand = buildStatuslineCommand({ variant: 'coexist', runtime });
   backupOnce(env, deps, state);
   writeSidecarAtomic(env, deps, {
     original: base.statusLine,
@@ -265,13 +228,18 @@ export function teardown({ env = process.env, deps = fs } = {}) {
   const marker = command == null ? null : detectMarker(command);
   const sidecar = readSidecar(env, deps);
   const state = { backedUp: false, now: Date.now(), rawOriginal: raw };
+  // Every terminal teardown branch clears both our artifacts (the sidecar pointer and the
+  // full-file backup); do it in one place so a new branch can't forget one.
+  const clearArtifacts = () => {
+    removeIfPresent(sidecarPath(env), deps);
+    removeIfPresent(backupPath(env), deps);
+  };
 
   if (marker === 'coexist') {
     if (sidecar) {
       backupOnce(env, deps, state);
       writeSettingsAtomic(env, deps, { ...base, statusLine: sidecar.original });
-      removeIfPresent(sidecarPath(env), deps);
-      removeIfPresent(backupPath(env), deps);
+      clearArtifacts();
       return { action: 'restored-original' };
     }
     // Sidecar lost, but the 0600 backup is a verbatim copy of the pre-setup settings.json —
@@ -282,8 +250,7 @@ export function teardown({ env = process.env, deps = fs } = {}) {
     if (backup && 'statusLine' in backup) {
       backupOnce(env, deps, state);
       writeSettingsAtomic(env, deps, { ...base, statusLine: backup.statusLine });
-      removeIfPresent(sidecarPath(env), deps);
-      removeIfPresent(backupPath(env), deps);
+      clearArtifacts();
       return { action: 'restored-from-backup' };
     }
     // No sidecar AND no usable backup — genuinely nothing to restore. Back to empty, and clear
@@ -292,8 +259,7 @@ export function teardown({ env = process.env, deps = fs } = {}) {
     const next = { ...base };
     delete next.statusLine;
     writeSettingsAtomic(env, deps, next);
-    removeIfPresent(sidecarPath(env), deps);
-    removeIfPresent(backupPath(env), deps);
+    clearArtifacts();
     return { action: 'coexist-no-sidecar-removed' };
   }
   if (marker === 'collect') {
@@ -301,8 +267,7 @@ export function teardown({ env = process.env, deps = fs } = {}) {
     const next = { ...base };
     delete next.statusLine;
     writeSettingsAtomic(env, deps, next);
-    removeIfPresent(sidecarPath(env), deps);
-    removeIfPresent(backupPath(env), deps);
+    clearArtifacts();
     return { action: 'removed-collect' };
   }
   if (command == null) return { action: 'noop-nothing-wired' };
@@ -327,10 +292,7 @@ if (isMain) {
   try {
     if (sub === 'detect') result = detect();
     else if (sub === 'wrap') {
-      result = wrap({
-        runtime: argValue(process.argv, '--runtime'),
-        platform: argValue(process.argv, '--platform') ?? 'posix',
-      });
+      result = wrap({ runtime: argValue(process.argv, '--runtime') });
     } else if (sub === 'teardown') result = teardown();
     else result = { action: 'error', reason: `unknown subcommand: ${sub ?? '(none)'}` };
   } catch (e) {

@@ -1,5 +1,12 @@
-function num(v) {
+// Coerce to a finite number, defaulting a non-number/NaN/Infinity to 0 (num) or null
+// (numOrNull). The canonical copies — imported by collect/report/transcript rather than
+// re-declared, since they're byte-identical everywhere they're needed.
+export function num(v) {
   return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+}
+
+export function numOrNull(v) {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
 export function usedTokens(usage) {
