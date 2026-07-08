@@ -1,7 +1,7 @@
 # claude-context — co-existing statusline
 
 **Date:** 2026-07-08
-**Status:** Revised per pushback review (2026-07-08); ready for implementation planning
+**Status:** Revised per two pushback reviews (2026-07-08); ready for implementation planning
 **Supersedes/extends:** builds on `2026-07-07-claude-context-plugin-design.md`. Where
 the two disagree on setup behavior, **this document wins.**
 
@@ -10,6 +10,15 @@ the two disagree on setup behavior, **this document wins.**
 > was **dropped** in review — see §8. The plugin keeps its current behavior of reporting
 > nothing (and directing the user to `/claude-context:setup`) when no collector snapshot
 > exists. What remains below is the co-existence design, tightened per the review.
+
+> **Revision note (2026-07-08, second pushback).** A second review made four changes,
+> folded into the sections below: (1) the marker ships in the **same** release as
+> `coexist.mjs`, so no legacy marker-less-collector fallback is needed (§3.3); (2) the
+> latency **budget** is replaced by a machine-dependent, recorded-and-disclosed
+> measurement with **no asserted millisecond bound** (§3.4, §3.5, §5); (3) native
+> PowerShell/cmd co-existence is **staged as a follow-up** — POSIX + Windows Git Bash
+> co-exist now, native PowerShell is keep-only (§3.3, §3.5, §7); (4) the full-file backup
+> is written **mode `0600`** and its mode is test-asserted (§3.5, §3.8, §5).
 
 ## 1. Purpose
 
@@ -51,9 +60,10 @@ Restated from the base spec, because the whole design turns on them:
 When setup wraps an existing statusline, claude-context becomes an **invisible tap**:
 it reads stdin, writes its snapshot, and passes stdin through unchanged to the
 original command, whose output is the *only* thing displayed. The user sees no change
-in the **displayed content**. (Co-existence does add a small per-refresh **latency** —
-the wrapper runs ahead of the original tool on every refresh — which §3.4 bounds,
-measures, and discloses at setup. "No visual change" means *content*, not *timing*.)
+in the **displayed content**. (Co-existence does add a per-refresh **latency** —
+the wrapper runs ahead of the original tool on every refresh — which §3.4 measures and
+discloses at setup, without asserting a fixed bound. "No visual change" means *content*,
+not *timing*.)
 
 ### 3.2 Two wiring modes, chosen by the slot's contents at setup time
 
@@ -66,7 +76,9 @@ measures, and discloses at setup. "No visual change" means *content*, not *timin
 An empty slot still makes us the visible statusline (an invisible tap with nothing
 to tap would be blank). We only go invisible when there is a real tool to preserve.
 "Already ours" is decided by the **ownership marker** (§3.3), never by exact-matching a
-resolved command string.
+resolved command string. (The foreign-command row ships for **POSIX + Windows Git Bash**;
+native PowerShell/cmd co-existence is staged — §3.3, §7 — and there a foreign slot is
+handled **keep-only**.)
 
 ### 3.3 Mechanism: a Node wrapper + a data sidecar
 
@@ -99,10 +111,21 @@ version-resilient, **tested** predicate (§3.8) rather than a brittle string com
 false "ours" would clobber a foreign tool; a false "foreign" would nest or block
 teardown).
 
-**PowerShell coexist launcher.** On PowerShell the wrapped case uses a Node launcher
-analogous to the collector's, but one that imports `coexist.mjs` and calls its CLI,
-invoked via a marked `cmd /c` command. The launcher file and its command both carry the
-`coexist` marker so ownership detection recognizes them.
+**No legacy fallback needed.** The marker is introduced by **this same release** as
+`coexist.mjs`, and the plugin has no installed base of marker-less `collect.mjs` commands
+in the wild, so ownership detection can rely on the marker alone — no path-shape fallback
+for pre-marker installs. The one obligation this creates: ship the marker and co-existence
+in **one** version and never release the marker separately later, which would open a
+marker-less window in which an existing collector could be misread as foreign and
+self-wrapped.
+
+**Windows co-existence scope.** The wrapped path ships for **POSIX and Windows + Git
+Bash** — both use the §3.4 POSIX `sh -c` spawn (Git Bash provides `sh`). **Native
+PowerShell/cmd co-existence is a staged follow-up (§7):** the nested-`cmd` + batch-`%%`
+materialization it requires (§3.4) is the riskiest corner in the feature and is
+deliberately kept off this release's critical path. On native PowerShell/cmd a foreign
+slot is therefore handled **keep-only** — setup changes nothing and reports that
+co-existence isn't wired there yet (never a silent replace), preserving §1.
 
 ### 3.4 `coexist.mjs` runtime flow — ordered for maximum safety
 
@@ -110,11 +133,13 @@ invoked via a marked `cmd /c` command. The launcher file and its command both ca
 2. **Spawn the original** command (from the sidecar), per platform:
    - **POSIX:** `spawn('sh', ['-c', originalCommand])` — the command is a single argv
      element, so we author no escaping; the shell receives it intact.
-   - **Windows:** to avoid mangling an arbitrary, quote-laden, possibly
-     already-`cmd /c` original, **materialize the stored command into a `.cmd` file in
-     the sidecar dir at wrap time and spawn `cmd /c <that>.cmd`** — cmd reads the body
-     line-by-line instead of re-quoting it as an argument. (Batch bodies have their own
-     `%` → `%%` quirk; the materialization step handles it.)
+   - **Windows + Git Bash:** uses the same POSIX `sh -c` spawn above (Git Bash provides
+     `sh`), so no extra escaping is authored. **Native PowerShell/cmd is deferred (§3.3,
+     §7).** The follow-up that adds it will materialize the stored command into a `0600`
+     `.cmd` file in the sidecar dir at wrap time and spawn `cmd /c <that>.cmd` (so cmd
+     reads the body line-by-line instead of re-quoting an arbitrary, quote-laden,
+     possibly already-`cmd /c` original) — and must solve the batch `%` → `%%` quirk
+     **concretely, with a `%`-bearing test fixture**, rather than assume it away.
 
    Write the buffered stdin to the child, pipe its stdout straight to ours, and
    propagate its exit code. *This is the guaranteed path — the child is running before
@@ -129,13 +154,19 @@ the sidecar, spawn the child — and **lazy-load** the snapshot lib so `token-ma
 Node cold-start sits in front of the original on every refresh; everything non-essential
 is deferred past the spawn.
 
-**Latency budget.** Wrapping adds the wrapper's Node cold-start (plus, on Windows, one
-`cmd` layer) ahead of the original tool on every ~300ms refresh — and the base setup
-already treats **300ms as the render ceiling** (it moved the PowerShell version scan
-into a launcher for exactly this reason). **Target: the wrapper adds < ~50ms** over
-invoking the original directly. §5 includes a measurement that runs the wrapped path
-against a representative original (`claude-hud`) and records the overhead against this
-budget; setup discloses the overhead at the confirm (§3.5).
+**Latency.** Wrapping adds a **second Node cold-start** — the wrapper runs, then spawns the
+original, which for a Node tool like `claude-hud` is itself another cold-start — ahead of
+the original on every ~300ms refresh, against a base setup that already treats **300ms as
+the render ceiling** (it moved the PowerShell version scan into a launcher for exactly this
+reason). This overhead is **machine-dependent** — Node cold-start alone varies widely by
+host and cache state — so this spec sets **no fixed millisecond target and asserts no
+millisecond bound**: a hard threshold would be flaky in CI and, worse, dishonest as a
+disclosed constant. Instead, three things: the *design* minimizes the overhead (the lean
+pre-spawn hot path + lazy-loaded snapshot lib above); the §5 measurement **records and
+prints** the wrapped-vs-direct overhead **without asserting a bound**; and setup
+**discloses the overhead measured live on the user's machine** against the actual original
+in the slot (§3.5) — an honest per-host number, in keeping with the instrument-not-advisor
+contract, not a "< Nms" promise.
 
 Failure isolation is therefore **structural**: the original tool runs as long as
 stdin is readable and its command is spawnable; the snapshot is a pure side effect
@@ -156,24 +187,32 @@ blank statusline, giving the user a visible signal that something is off.
 ### 3.5 Setup UX
 
 - **Empty slot** → wire `collect.mjs` automatically (nothing to preserve).
-- **Foreign command** → a **single confirm** (proceed / cancel — *not* a
-  replace/keep menu). Show the redacted, truncated original, explain co-existence +
-  teardown, and **disclose the small per-refresh latency overhead** (§3.4). On
-  *proceed*: write the sidecar, then wire `coexist.mjs` with an **atomic**
-  `settings.json` write. On *cancel*: change nothing, and state honestly that
-  claude-context will have **no** live numbers until setup runs and co-exists (the old
-  "still works in transcript-only mode" copy was inaccurate — with a foreign tool
-  owning the slot and no snapshot ever written, there is nothing).
+- **Foreign command (POSIX / Windows Git Bash)** → a **single confirm** (proceed / cancel
+  — *not* a replace/keep menu). Show the redacted, truncated original, explain
+  co-existence + teardown, and **disclose the per-refresh latency overhead measured live
+  on this machine** against the original in the slot (§3.4). On *proceed*: write the
+  sidecar, then wire `coexist.mjs` with an **atomic** `settings.json` write. On *cancel*:
+  change nothing, and state honestly that claude-context will have **no** live numbers
+  until setup runs and co-exists (the old "still works in transcript-only mode" copy was
+  inaccurate — with a foreign tool owning the slot and no snapshot ever written, there is
+  nothing).
+- **Foreign command (native PowerShell/cmd)** → co-existence is not yet wired there (§3.3,
+  §7). Setup makes **no change** — **keep-only**, never a silent replace — and reports
+  that co-existence isn't available on native PowerShell yet; the user keeps their
+  statusline and can get live numbers via Git Bash or a future release.
 - **Already ours** (marker present) → idempotent refresh; never nest.
 
 **Full-file backup.** Before its first mutating write, the wiring module writes exactly
 **one** full-file backup of `settings.json` to a **stable** path
 (`settings.json.claude-context.bak` — overwritten each run, so no per-run timestamp
-clutter). The sidecar restores the `statusLine` object; this backup is the **whole-file
-recovery net** against a bad merge in the single most dangerous operation (§3.8), since
-`~/.claude/settings.json` is frequently not under version control. Teardown removes it on
-clean completion. This replaces the old per-write timestamped `.bak` (which cluttered):
-**one** backup — not none, and not many.
+clutter), **mode `0600`** in the `0700` config dir. That mode is not incidental: because
+`~/.claude/settings.json` routinely holds an `env` block with API keys/tokens, a
+world-readable backup beside it would leak them — so the backup matches the `0600` every
+other file this plugin writes (snapshot, sidecar). The sidecar restores the `statusLine`
+object; this backup is the **whole-file recovery net** against a bad merge in the single
+most dangerous operation (§3.8), since `~/.claude/settings.json` is frequently not under
+version control. Teardown removes it on clean completion. This replaces the old per-write
+timestamped `.bak` (which cluttered): **one** backup — not none, and not many.
 
 ### 3.6 Teardown (`commands/teardown.md`, new)
 
@@ -225,8 +264,8 @@ non-atomic write breaks the user's tool. It is therefore implemented as a **smal
 tested wiring module** (`scripts/wiring.mjs`) that both commands invoke, rather than
 re-derived from prose on every run. This makes the following into **test-enforced
 guarantees**: atomicity; idempotency; **never-clobber-unowned** (decided by the §3.3
-marker, not a string compare); a **single full-file backup** before the first mutating
-write; and **orphaned-sidecar detection**. The markdown commands shrink to: detect
+marker, not a string compare); a **single `0600` full-file backup** before the first
+mutating write; and **orphaned-sidecar detection**. The markdown commands shrink to: detect
 platform/runtime, resolve the plugin path, call the wiring module, report the outcome.
 (This is a small, deliberate departure from the all-markdown setup convention, justified
 by the safety stakes.)
@@ -234,8 +273,9 @@ by the safety stakes.)
 ## 4. Architecture / new components
 
 - **New `scripts/coexist.mjs`** — the invisible-tap wrapper (§3.4). New I/O entry
-  point (spawns the child, writes the snapshot). On Windows, materializes the stored
-  original into a `.cmd` for spawning.
+  point (spawns the child, writes the snapshot). Ships for **POSIX + Windows Git Bash**
+  (the `sh -c` spawn). *(Native PowerShell/cmd — materializing the stored original into a
+  `0600` `.cmd` for spawning — is the staged follow-up, §7.)*
 - **New `scripts/wiring.mjs`** — tested `settings.json` + sidecar surgery for setup
   and teardown (§3.8): atomic read-modify-write, one full-file backup before the first
   write, marker-based ownership detection, orphaned-sidecar handling. New I/O entry
@@ -259,17 +299,19 @@ The "only two I/O entry points" convention grows to four (`collect`, `report`,
   of its own; **failure isolation** — snapshot write throws yet the child still runs
   and its output still appears; child spawned even when snapshot building throws
   synchronously; missing/corrupt sidecar → degrades to our own line; **forwards a
-  realistic quote-laden original** (the actual `claude-hud` `cmd /c "" … ""` string) and
-  asserts the child runs and its stdout passes through (issue 6); **records the
-  wrapper's added latency** over invoking the original directly, against the < ~50ms
-  budget (issue 4).
+  realistic quote-laden original** (a representative `claude-hud` `bash -c '…'` string,
+  with its nested `'"'"'` quoting) via the POSIX/Git-Bash `sh -c` spawn and asserts the
+  child runs and its stdout passes through (issue 6); **records and prints the wrapper's
+  added latency** over invoking the original directly — a machine-dependent measurement
+  for disclosure, **asserting no millisecond bound** (issue 4, Option A).
 - **New `tests/wiring.test.mjs`**: empty → wires `collect.mjs` (marked), no sidecar;
   foreign → sidecar stores the whole original `statusLine` object + wires `coexist.mjs`
   (marked), atomically, preserving other settings keys; **writes exactly one full-file
-  backup before the first mutating write** (issue 3); idempotent for already-ours **via
-  marker detection**, never nests (issue 5); teardown restores the original verbatim,
-  deletes the sidecar, **and removes the backup**; **never-clobber-unowned** (decided by
-  marker, not string compare); **orphaned-sidecar detection**.
+  backup before the first mutating write, and asserts its mode is `0600`** (issue 3 +
+  Issue 4); idempotent for already-ours **via marker detection**, never nests (issue 5);
+  teardown restores the original verbatim, deletes the sidecar, **and removes the
+  backup**; **never-clobber-unowned** (decided by marker, not string compare);
+  **orphaned-sidecar detection**.
 - **Rewritten `tests/setup.test.mjs`**: replace the Replace/Keep/backup assertions
   with positive facts — wires `collect.mjs` for empty and `coexist.mjs` for occupied,
   calls the wiring module, references `/teardown`, keeps the platform matrix and the
@@ -283,19 +325,22 @@ The "only two I/O entry points" convention grows to four (`collect`, `report`,
 ## 6. Documentation
 
 - **README.md** — rewrite "Already have a statusline?" into the co-exist story (runs
-  alongside your tool invisibly, displayed content unchanged, a small per-refresh
-  overhead, undo with `/teardown`), plus a short "what if another statusline plugin
-  takes over?" fail-safe note. **Do not claim any zero-setup functionality** — the
+  alongside your tool invisibly, displayed content unchanged, a **per-refresh overhead
+  disclosed at setup**, undo with `/teardown`), noting co-existence is available on
+  **POSIX and Windows + Git Bash** today (native PowerShell keeps its statusline
+  untouched for now — §7), plus a short "what if another statusline plugin takes over?"
+  fail-safe note. **Do not claim any zero-setup functionality** — the
   plugin reports nothing until setup runs (the "works with zero setup" selling point is
   removed; §8). Preserve the substrings the docs test requires
   (`/plugin install claude-context`, `/claude-context:setup`, the "no
   advice/recommendations" phrase).
 - **CHANGELOG.md** — a new versioned entry for co-exist + teardown.
 - **CLAUDE.md** — rewrite the "Setup wiring" convention bullet (co-exist by wrapping
-  invisibly and reversibly; never replaces; teardown restores verbatim; a tested wiring
-  script does the surgery, including one full-file backup + marker-based ownership;
-  stays 1-deep; fails safe). Update the entry-point count (2 → 4). (No report
-  state-machine change — Part B was dropped, §8.)
+  invisibly and reversibly on **POSIX + Git Bash** — native PowerShell staged, keep-only
+  for now; never replaces; teardown restores verbatim; a tested wiring script does the
+  surgery, including one `0600` full-file backup + marker-based ownership; stays 1-deep;
+  fails safe). Update the entry-point count (2 → 4). (No report state-machine change —
+  Part B was dropped, §8.)
 
 ## 7. Non-goals
 
@@ -304,6 +349,11 @@ The "only two I/O entry points" convention grows to four (`collect`, `report`,
   `collector` snapshot; the report is untouched.
 - **No** recommendations, labels, thresholds, or policy — the instrument-not-advisor
   contract is unchanged.
+- **Staged follow-up (not in this release):** native PowerShell/cmd co-existence, which
+  requires materializing the stored original into a `0600` `.cmd` and spawning nested
+  `cmd` (with the batch `%` → `%%` quirk solved concretely and covered by a `%`-bearing
+  test). Until it lands, native PowerShell/cmd handles a foreign slot **keep-only**
+  (§3.3, §3.5); POSIX and Windows + Git Bash co-exist now.
 - **Dropped from this spec:** the model-window fallback and its per-model default table
   and `config.json` override (§8).
 
