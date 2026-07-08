@@ -22,8 +22,8 @@ function shSingleQuote(body) {
   return `'${body.replace(/'/g, `'"'"'`)}'`;
 }
 
-// `platform` is still accepted (setup.md passes it) but no longer selects a glob variant —
-// the resolver is platform-agnostic now. Kept in the object shape for the wrap()/CLI contract.
+// No `platform` knob: the version-resolution glob is identical on POSIX and Git Bash, so
+// there is nothing to select. Re-add one only if a target shell needs a different glob.
 export function buildStatuslineCommand({ variant, runtime }) {
   if (variant !== 'collect' && variant !== 'coexist') throw new Error(`bad variant: ${variant}`);
   if (typeof runtime !== 'string' || runtime.trim() === '') throw new Error('runtime required');

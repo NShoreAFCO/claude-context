@@ -178,13 +178,7 @@ function writeSidecarAtomic(env, deps, obj) {
 // exclusive lockfile, or re-read + re-classify before the final write) was judged not worth
 // its stale-lock/complexity cost at this stage. If concurrent setup/teardown ever becomes
 // common, guard the mutation here.
-export function wrap({
-  env = process.env,
-  deps = fs,
-  now = Date.now(),
-  runtime,
-  platform = 'posix',
-} = {}) {
+export function wrap({ env = process.env, deps = fs, now = Date.now(), runtime } = {}) {
   const sp = settingsPath(env);
   const { raw, exists, settings } = readSettings(sp, deps);
   if (settings === undefined && exists) return { action: 'error', reason: 'unparseable-settings' };
@@ -196,7 +190,7 @@ export function wrap({
   const setVariant = (variant) => {
     // Build (and thus validate runtime) BEFORE any disk write, so a bad runtime never leaves
     // a half-written backup/sidecar behind.
-    const command = buildStatuslineCommand({ variant, runtime, platform });
+    const command = buildStatuslineCommand({ variant, runtime });
     backupOnce(env, deps, state);
     writeSettingsAtomic(env, deps, {
       ...base,
@@ -235,7 +229,7 @@ export function wrap({
   }
   // Fresh foreign wrap: build the wrapper command FIRST (validates runtime before any write),
   // then back up, store the ORIGINAL (safe ordering), then wire coexist.
-  const wrapperCommand = buildStatuslineCommand({ variant: 'coexist', runtime, platform });
+  const wrapperCommand = buildStatuslineCommand({ variant: 'coexist', runtime });
   backupOnce(env, deps, state);
   writeSidecarAtomic(env, deps, {
     original: base.statusLine,
@@ -327,10 +321,7 @@ if (isMain) {
   try {
     if (sub === 'detect') result = detect();
     else if (sub === 'wrap') {
-      result = wrap({
-        runtime: argValue(process.argv, '--runtime'),
-        platform: argValue(process.argv, '--platform') ?? 'posix',
-      });
+      result = wrap({ runtime: argValue(process.argv, '--runtime') });
     } else if (sub === 'teardown') result = teardown();
     else result = { action: 'error', reason: `unknown subcommand: ${sub ?? '(none)'}` };
   } catch (e) {
