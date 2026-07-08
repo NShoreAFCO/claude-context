@@ -29,8 +29,9 @@ the report's shape are unchanged.
 - **Fail-safe statusline:** a stdin stream error or a failed spawn of the wrapped original
   degrades to our own line instead of blanking the statusline.
 - **Docs:** the README flags alpha status up front, explains why the plugin needs a
-  statusline, and documents the Windows limitations (POSIX-only file modes, the `bash`
-  dependency, `settings.json` normalization).
+  statusline (and why the built-in `/context` can't replace it for agents — it has no
+  programmatic entry point and can't see usage/cost/compactions), and documents the Windows
+  limitations (POSIX-only file modes, the `bash` dependency, `settings.json` normalization).
 
 ## 0.3.0
 
