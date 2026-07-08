@@ -179,3 +179,24 @@ test('teardown: NEVER clobbers a slot we do not own', () => {
 test('teardown: nothing of ours wired → idempotent no-op', () => {
   assert.equal(teardown({ env: { CLAUDE_CONFIG_DIR: mkCfg() } }).action, 'noop-nothing-wired');
 });
+
+test('teardown: coexist marker but sidecar lost → removes our statusLine entry, preserves siblings, drops backup', () => {
+  const cfg = mkCfg();
+  writeSettings(cfg, { model: 'opus', statusLine: { type: 'command', command: COEXIST } });
+  fs.writeFileSync(path.join(cfg, 'settings.json.claude-context.bak'), '{}');
+  const r = teardown({ env: { CLAUDE_CONFIG_DIR: cfg } });
+  assert.equal(r.action, 'coexist-no-sidecar-removed');
+  const settings = readSettingsFile(cfg);
+  assert.equal('statusLine' in settings, false, 'our wrapper is removed, not written back');
+  assert.equal(settings.model, 'opus', 'sibling keys survive');
+  assert.equal(fs.existsSync(path.join(cfg, 'settings.json.claude-context.bak')), false);
+});
+
+test('teardown: unparseable settings.json → error, file left untouched', () => {
+  const cfg = mkCfg();
+  fs.writeFileSync(path.join(cfg, 'settings.json'), '{ not json ');
+  const r = teardown({ env: { CLAUDE_CONFIG_DIR: cfg } });
+  assert.equal(r.action, 'error');
+  assert.equal(r.reason, 'unparseable-settings');
+  assert.equal(fs.readFileSync(path.join(cfg, 'settings.json'), 'utf8'), '{ not json ');
+});
