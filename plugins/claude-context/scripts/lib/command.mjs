@@ -26,6 +26,10 @@ export function buildStatuslineCommand({ variant, runtime, platform = 'posix' })
   if (variant !== 'collect' && variant !== 'coexist') throw new Error(`bad variant: ${variant}`);
   if (typeof runtime !== 'string' || runtime.trim() === '') throw new Error('runtime required');
   const marker = markerAssignment(variant); // CLAUDE_CONTEXT_WRAPPER=<variant>
-  const body = `export ${marker}; ${globExpr(platform)}; exec "${runtime}" "\${plugin_dir}scripts/${variant}.mjs"`;
+  // Single-quote the runtime at the INNER level too. The outer bash -c '<body>' escaping
+  // does not protect it: it lands inside inner double quotes where $( ), backticks and ${}
+  // still evaluate. shSingleQuote makes it an inert literal (and the outer shSingleQuote(body)
+  // re-escapes those quotes uniformly), while still tolerating a legit path with spaces.
+  const body = `export ${marker}; ${globExpr(platform)}; exec ${shSingleQuote(runtime)} "\${plugin_dir}scripts/${variant}.mjs"`;
   return `bash -c ${shSingleQuote(body)}`;
 }
