@@ -1,7 +1,7 @@
 {
   "name": "claude-context",
   "version": "0.3.0",
-  "description": "On-demand session resource facts (context window, 5h/7d usage, cost, compactions) for users and agents — pure measurements, no advice.",
+  "description": "Your agents can't manage a budget they can't see — claude-context reports their own context, 5h/7d usage, and cost on demand. Facts only; your rules set the policy.",
   "license": "MIT",
   "type": "module",
   "private": true,

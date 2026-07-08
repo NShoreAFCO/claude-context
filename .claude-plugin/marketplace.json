@@ -1,13 +1,13 @@
 {
   "name": "claude-context",
   "owner": { "name": "Ovid" },
-  "description": "On-demand session resource facts for users and agents — pure measurements, no advice.",
+  "description": "Your agents can't manage a budget they can't see — claude-context reports their own context, 5h/7d usage, and cost on demand. Facts only; your rules set the policy.",
   "version": "0.3.0",
   "plugins": [
     {
       "name": "claude-context",
       "source": "./plugins/claude-context",
-      "description": "Report the current session's context window, 5h/7d subscription usage, cost, and compactions on demand — for users and agents. Pure measurements, no recommendations.",
+      "description": "Your agents can't manage a budget they can't see — claude-context reports their own context, 5h/7d usage, and cost on demand. Facts only; your rules set the policy.",
       "category": "monitoring",
       "tags": ["context", "usage", "rate-limits", "statusline", "telemetry"]
     }
