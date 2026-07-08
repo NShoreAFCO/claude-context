@@ -1,5 +1,10 @@
 # claude-context
 
+> ⚠️ **Alpha software.** Early and actively changing: expect breaking changes between
+> versions and rough edges. **macOS, Linux, and Windows + Git Bash only** (POSIX shells) —
+> native PowerShell/cmd is unsupported this release. Everything setup touches is reversible
+> with `/claude-context:teardown`.
+
 **Your agents can't manage a budget they can't see.** `claude-context` gives Claude
 Code and its subagents a live, machine-readable read of their own context window,
 subscription usage, and cost — so they can follow *your* rules about when to stop,
@@ -105,16 +110,26 @@ enable it once:
 /claude-context:setup
 ```
 
-This wires a small statusline helper that captures the usage and cost figures Claude
-Code shares only with your statusline. (Live 5h/7d usage requires a Pro or Max
-subscription.)
+This wires a small statusline helper — the **collector** — into your Claude Code
+settings. (Live 5h/7d usage requires a Pro or Max subscription.)
+
+**Why a statusline, though?** Claude Code sends the live context-window size,
+subscription usage, and cost to exactly **one** place: the process that renders your
+statusline, over stdin, a few times a second. A slash command or skill run mid-session
+— like the report — gets none of that. It can only read the session transcript, which
+carries token counts but no usage and no cost. So the only way to see those numbers is
+to sit in the statusline slot, record each update to a private per-session snapshot,
+and read that snapshot back when the report runs. That snapshot is the entire reason
+`/claude-context:setup` exists — the collector is not a display, it's a tap.
 
 ### Already have a statusline?
 
-claude-context **co-exists** with it. `/claude-context:setup` wraps your existing statusline
-so both run — your displayed line is **unchanged** — while claude-context quietly captures
-its snapshot underneath. Undo any time with `/claude-context:teardown`, which restores your
-original statusline verbatim. Setup **never** replaces or takes over a slot it doesn't own.
+Only one thing can hold the statusline slot, so claude-context **co-exists** rather than
+evict. `/claude-context:setup` first copies your existing statusline command into a private
+sidecar file, then puts itself in the slot as a wrapper that runs your original *and* taps
+its input for the snapshot. Both run; your **displayed line is unchanged**. Because the
+original was saved verbatim, `/claude-context:teardown` can put it back byte-for-byte and
+remove the sidecar. Setup **never** replaces or takes over a slot it doesn't own.
 
 Co-existence is available on **macOS, Linux, and Windows + Git Bash** in this alpha. On
 **native PowerShell/cmd** claude-context does not wire a statusline this release (a change
