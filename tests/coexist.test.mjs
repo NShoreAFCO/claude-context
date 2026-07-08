@@ -220,14 +220,14 @@ function runWrapper(cfg, stdinStr) {
 }
 
 test('forwards stdin and passes the original stdout through unchanged', () => {
-  const cfg = mkCfg('cat'); // sh -c cat echoes stdin to stdout
+  const cfg = mkCfg('cat'); // bash -c cat echoes stdin to stdout
   const r = runWrapper(cfg, STDIN);
   assert.equal(r.status, 0);
   assert.equal(r.stdout, STDIN, 'wrapper adds nothing; the original tool owns the line');
   assert.ok(fs.existsSync(snapFile(cfg)), 'snapshot still written');
 });
 
-test('forwards a realistic quote-laden original via sh -c', () => {
+test('forwards a realistic quote-laden original via bash -c', () => {
   // Representative of a claude-hud bash -c '…' with nested '"'"' quoting.
   // closing quote corrected — brief fixture was missing one `'` (would exit 2 as invalid shell)
   const original = `bash -c 'printf %s '"'"'q1 "q2" '"'"''`;

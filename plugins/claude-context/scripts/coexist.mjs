@@ -68,7 +68,9 @@ export async function runCoexist({
 
   // Hot path: spawn the original FIRST, forward stdin, inherit stdout+stderr (the original
   // owns the display; inheriting also avoids a full-stderr-pipe deadlock in a chatty child).
-  const child = spawn('sh', ['-c', sidecar.original.command], {
+  // Use `bash -c` (not `sh -c`) for consistency with command.mjs, which the plugin already
+  // requires — a foreign statusline may rely on bashisms that a dash/busybox /bin/sh lacks.
+  const child = spawn('bash', ['-c', sidecar.original.command], {
     stdio: ['pipe', 'inherit', 'inherit'],
     env,
   });
