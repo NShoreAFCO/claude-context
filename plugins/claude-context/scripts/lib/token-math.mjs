@@ -3,7 +3,11 @@ function num(v) {
 }
 
 export function usedTokens(usage) {
-  return num(usage?.input_tokens) + num(usage?.cache_read_input_tokens) + num(usage?.cache_creation_input_tokens);
+  return (
+    num(usage?.input_tokens) +
+    num(usage?.cache_read_input_tokens) +
+    num(usage?.cache_creation_input_tokens)
+  );
 }
 
 export function percentage(used, windowSize) {

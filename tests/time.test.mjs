@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { epochToMs, formatDuration, clockHM } from '../scripts/lib/time.mjs';
+import { epochToMs, formatDuration, clockHM } from '../plugins/claude-context/scripts/lib/time.mjs';
 
 test('epochToMs distinguishes seconds from milliseconds', () => {
   assert.equal(epochToMs(1751892600), 1751892600000);

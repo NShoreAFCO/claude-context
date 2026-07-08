@@ -3,7 +3,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { resolveConfigDir, snapshotDir, snapshotFileName, snapshotPath, resolveSessionId } from '../scripts/lib/config-dir.mjs';
+import {
+  resolveConfigDir,
+  snapshotDir,
+  snapshotFileName,
+  snapshotPath,
+  resolveSessionId,
+} from '../plugins/claude-context/scripts/lib/config-dir.mjs';
 
 test('honors CLAUDE_CONFIG_DIR when set', () => {
   assert.equal(resolveConfigDir({ CLAUDE_CONFIG_DIR: '/tmp/cfg' }), '/tmp/cfg');
@@ -15,7 +21,10 @@ test('falls back to homedir/.claude', () => {
 });
 
 test('snapshotDir appends claude-context', () => {
-  assert.equal(snapshotDir({ CLAUDE_CONFIG_DIR: '/tmp/cfg' }), path.join('/tmp/cfg', 'claude-context'));
+  assert.equal(
+    snapshotDir({ CLAUDE_CONFIG_DIR: '/tmp/cfg' }),
+    path.join('/tmp/cfg', 'claude-context'),
+  );
 });
 
 test('snapshotPath keys the file by session id', () => {
@@ -33,11 +42,26 @@ test('snapshotFileName sanitizes unsafe ids to a single traversal-free segment',
 });
 
 test('resolveSessionId: --session-id arg wins, then env, else null; placeholders/empties are absent', () => {
-  assert.equal(resolveSessionId({ argv: ['node', 'r', '--session-id', 'sid-1'], env: {} }), 'sid-1');
+  assert.equal(
+    resolveSessionId({ argv: ['node', 'r', '--session-id', 'sid-1'], env: {} }),
+    'sid-1',
+  );
   assert.equal(resolveSessionId({ argv: ['node', 'r', '--session-id=sid-2'], env: {} }), 'sid-2');
-  assert.equal(resolveSessionId({ argv: ['node', 'r'], env: { CLAUDE_CODE_SESSION_ID: 'sid-env' } }), 'sid-env');
-  assert.equal(resolveSessionId({ argv: ['node', 'r', '--session-id', 'sid-arg'], env: { CLAUDE_CODE_SESSION_ID: 'sid-env' } }), 'sid-arg');
+  assert.equal(
+    resolveSessionId({ argv: ['node', 'r'], env: { CLAUDE_CODE_SESSION_ID: 'sid-env' } }),
+    'sid-env',
+  );
+  assert.equal(
+    resolveSessionId({
+      argv: ['node', 'r', '--session-id', 'sid-arg'],
+      env: { CLAUDE_CODE_SESSION_ID: 'sid-env' },
+    }),
+    'sid-arg',
+  );
   assert.equal(resolveSessionId({ argv: ['node', 'r'], env: {} }), null);
   // An older Claude Code that doesn't substitute ${CLAUDE_SESSION_ID} passes the literal template through: treat as absent.
-  assert.equal(resolveSessionId({ argv: ['node', 'r', '--session-id', '${CLAUDE_SESSION_ID}'], env: {} }), null);
+  assert.equal(
+    resolveSessionId({ argv: ['node', 'r', '--session-id', '${CLAUDE_SESSION_ID}'], env: {} }),
+    null,
+  );
 });

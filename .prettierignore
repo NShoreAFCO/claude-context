@@ -1,0 +1,13 @@
+# Never format: deps, generated lockfile, vendored reference, scratch, historical
+# design/review records, and the SDD run artifacts.
+node_modules/
+package-lock.json
+claude-hud/
+scratch/
+docs/
+paad/
+.superpowers/
+
+# Prose is hand-authored (README/SKILL/CLAUDE) and setup.md carries sensitive
+# cross-platform command strings — format code, not markdown.
+**/*.md
