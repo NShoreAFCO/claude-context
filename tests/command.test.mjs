@@ -41,6 +41,19 @@ test('bad inputs throw', () => {
   assert.throws(() => buildStatuslineCommand({ variant: 'collect', runtime: '' }));
 });
 
+test('the Git Bash command filters the plugin dir to semver versions, like the POSIX/docs form', () => {
+  const cmd = buildStatuslineCommand({
+    variant: 'collect',
+    runtime: '/usr/bin/node',
+    platform: 'gitbash',
+  });
+  assert.match(cmd, /grep -E/, 'gitbash branch must drop non-semver cache dirs, not just sort -V');
+  assert.ok(
+    cmd.includes('/claude-context/[0-9]+\\.[0-9]+\\.[0-9]+/'),
+    'filters on the semver version segment',
+  );
+});
+
 // The runtime path is embedded in a persisted command re-run every ~300ms. A path
 // carrying shell metacharacters must NOT be evaluated by the inner bash.
 test('runtime is not shell-injectable into the persisted command', () => {

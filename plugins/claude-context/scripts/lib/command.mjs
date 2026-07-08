@@ -5,8 +5,10 @@ import { markerAssignment } from './marker.mjs';
 // to the shipped collect launcher in commands/setup.md; only the sort differs by platform.
 function globExpr(platform) {
   if (platform === 'gitbash') {
-    // Git Bash: sort -V avoids nested quoting (per claude-hud's Git Bash branch).
-    return 'plugin_dir=$(ls -1d "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/claude-context/*/ 2>/dev/null | sort -V | tail -1)';
+    // Git Bash: sort -V avoids the awk nested-quoting the POSIX branch needs. Add the same
+    // semver filter the POSIX branch / docs use (double-quoted to stay single-quote-free) so a
+    // stray non-semver cache dir can't out-sort the real version.
+    return 'plugin_dir=$(ls -1d "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/claude-context/*/ 2>/dev/null | grep -E "/claude-context/[0-9]+\\.[0-9]+\\.[0-9]+/" | sort -V | tail -1)';
   }
   // POSIX (macOS/Linux). Numeric sort on the version segment; ported verbatim from setup.md.
   return [
