@@ -10,23 +10,34 @@ const setup = readFileSync(
   'utf8',
 );
 
-test('wires the collector, not the HUD', () => {
-  assert.match(setup, /scripts\/collect\.mjs/);
-  assert.match(setup, /plugins\/cache\/\*\/claude-context\//);
+// Positive facts only — do NOT grep for word-absence ("replace"/"keep"), the doc
+// legitimately explains it never replaces, which would false-positive (base contract warning).
+
+test('delegates the surgery to the wiring module via detect then wrap', () => {
+  // the doc quotes the plugin path (`...wiring.mjs" detect`), so tolerate the closing quote — still asserts delegation to detect/wrap
+  assert.match(setup, /wiring\.mjs"? detect/);
+  assert.match(setup, /wiring\.mjs"? wrap/);
 });
 
-test('covers the platform matrix', () => {
-  assert.match(setup, /Git Bash|MSYS/i);
-  assert.match(setup, /PowerShell/i);
+test('empty wires collect, foreign wires coexist (both via the wiring module)', () => {
+  assert.match(setup, /collect/);
+  assert.match(setup, /coexist/);
 });
 
-test('does replace-or-keep, never silent overwrite', () => {
+test('a foreign slot is a single proceed/cancel confirm', () => {
   assert.match(setup, /AskUserQuestion/);
-  assert.match(setup, /Replace/i);
-  assert.match(setup, /Keep/i);
-  assert.match(setup, /back\s?up/i);
+  assert.match(setup, /proceed/i);
+  assert.match(setup, /cancel/i);
 });
 
-test('verifies a snapshot after wiring (session-keyed glob, not a fixed name)', () => {
+test('platform matrix is POSIX + Git Bash only; native PowerShell is reported unsupported, no settings change', () => {
+  assert.match(setup, /Git Bash/i);
+  assert.match(setup, /PowerShell/);
+  assert.match(setup, /unsupported/i);
+  assert.match(setup, /no (settings )?change|makes no change/i);
+});
+
+test('references teardown and keeps the session-keyed snapshot verification glob', () => {
+  assert.match(setup, /\/claude-context:teardown/);
   assert.match(setup, /snapshot-\*\.json/);
 });
