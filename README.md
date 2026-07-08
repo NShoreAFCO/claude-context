@@ -55,6 +55,25 @@ the *policy*. The 40% rule, the budget guardrail, the checkpoint trigger — tho
 in your `CLAUDE.md`, your skills, and your subagent prompts, where you control them. A
 tool that hard-coded its own thresholds would just fight the ones you wrote.
 
+## Doesn't `/context` already show this?
+
+At your keyboard, largely yes — and in more detail. Claude Code's built-in `/context` breaks
+context usage down by category (system prompt, tools, MCP, skills, messages) more thoroughly
+than this plugin's single context line. If a human reading the terminal is all you need,
+reach for `/context`.
+
+But `/context` is a command **you type**: it runs inside Claude Code and prints to your
+screen. There is no tool, script, or CLI entry point an *agent* can call to produce it — a
+subagent mid-task can't run `/context` and read the result, it would have to ask you to type
+it and wait. `/context` also can't show 5h/7d usage, cost, or compaction count at all,
+because those reach only the statusline (see [below](#turn-on-live-usage-and-cost)), never
+the transcript `/context` reads from.
+
+`claude-context` is for the other side of that line. Its report is backed by a plain script
+an agent runs and parses as JSON — the programmatic entry point `/context` lacks — and it
+carries the usage, cost, and compaction numbers `/context` can't see. **`/context` is for
+you; `claude-context` is for your agents.**
+
 ## Install
 
 Add marketplace:
