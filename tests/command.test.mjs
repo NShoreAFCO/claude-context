@@ -4,8 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { buildStatuslineCommand } from '../plugins/claude-context/scripts/lib/command.mjs';
 import { detectMarker } from '../plugins/claude-context/scripts/lib/marker.mjs';
 
@@ -58,7 +57,10 @@ test('the Git Bash command filters the plugin dir to semver versions, like the P
 // carrying shell metacharacters must NOT be evaluated by the inner bash.
 test('runtime is not shell-injectable into the persisted command', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-inj-'));
-  for (const payload of [`$(touch ${path.join(dir, 'SUB')})`, `\`touch ${path.join(dir, 'BT')}\``]) {
+  for (const payload of [
+    `$(touch ${path.join(dir, 'SUB')})`,
+    `\`touch ${path.join(dir, 'BT')}\``,
+  ]) {
     const cmd = buildStatuslineCommand({ variant: 'collect', runtime: payload, platform: 'posix' });
     spawnSync('bash', ['-c', cmd], {
       input: '{}',

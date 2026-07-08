@@ -25,7 +25,8 @@ test('redactSecrets masks the additional secret shapes a foreign command may emb
     /AIzaSyD-1234567890abcdefghijklmnopqrstuvw/,
   );
   // JWT / bearer-style triple-segment token.
-  const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U';
+  const jwt =
+    'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U';
   assert.doesNotMatch(redactSecrets(`auth ${jwt}`), /eyJzdWI/);
   // Basic-auth URL: mask the password segment, keep the rest usable as a preview.
   const url = redactSecrets('curl https://user:hunter2secret@example.com/x');

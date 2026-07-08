@@ -168,8 +168,7 @@ export function wrap({
 } = {}) {
   const sp = settingsPath(env);
   const { raw, exists, settings } = readSettings(sp, deps);
-  if (settings === undefined && exists)
-    return { action: 'error', reason: 'unparseable-settings' };
+  if (settings === undefined && exists) return { action: 'error', reason: 'unparseable-settings' };
   const base = settings ?? {};
   const command = currentCommand(base);
   const slot = classify(command, base.statusLine != null);
@@ -241,8 +240,7 @@ function removeIfPresent(file, deps) {
 export function teardown({ env = process.env, deps = fs } = {}) {
   const sp = settingsPath(env);
   const { raw, exists, settings } = readSettings(sp, deps);
-  if (settings === undefined && exists)
-    return { action: 'error', reason: 'unparseable-settings' };
+  if (settings === undefined && exists) return { action: 'error', reason: 'unparseable-settings' };
   const base = settings ?? {};
   const command = currentCommand(base);
   const marker = command == null ? null : detectMarker(command);

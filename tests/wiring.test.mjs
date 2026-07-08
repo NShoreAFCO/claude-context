@@ -232,7 +232,9 @@ test('wrap: backs up the settings read at start, not a concurrent re-read', () =
     },
   };
   wrap({ env: { CLAUDE_CONFIG_DIR: cfg }, now: 0, runtime: RUNTIME, deps });
-  const bak = JSON.parse(fs.readFileSync(path.join(cfg, 'settings.json.claude-context.bak'), 'utf8'));
+  const bak = JSON.parse(
+    fs.readFileSync(path.join(cfg, 'settings.json.claude-context.bak'), 'utf8'),
+  );
   assert.equal(bak.statusLine.command, FOREIGN, 'backup holds the original, not a re-read wrapper');
 });
 
