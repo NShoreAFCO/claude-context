@@ -70,7 +70,7 @@ async function readStdin() {
 
 export async function runCli({ argv = process.argv, now = Date.now(), readInput = readStdin, env = process.env, deps = fs, write = (s) => process.stdout.write(s) } = {}) {
   const silent = argv.includes('--silent');
-  let stdin = {};
+  let stdin;
   try { stdin = JSON.parse(await readInput()); } catch { stdin = {}; }
   const snapshot = buildSnapshot(stdin, now);
   // Key by this session's id (from stdin) so concurrent same-account sessions each

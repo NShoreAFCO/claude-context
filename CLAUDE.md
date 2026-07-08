@@ -47,9 +47,10 @@ These were confirmed by capturing a real session; the fixtures in `tests/fixture
 
 ## Commands and toolchain
 
-- **Runtime:** Node ESM (`.mjs`), **zero dependencies, no build step**. Requires Node 18+ (or Bun). Scripts run directly; there is no bundler, transpiler, or lint config by design.
-- **Tests:** Node's built-in runner — `npm test` runs `node --test tests/*.test.mjs`. Single file: `node --test tests/<name>.test.mjs`. The glob is scoped to `tests/` so the vendored `claude-hud/` suite is excluded.
-- No network, no credential access; all tests are local-only.
+- **Runtime:** Node ESM (`.mjs`), **no build step**. The **shipped plugin has zero third-party dependencies** — its scripts import only `node:` built-ins — and requires Node 18+ (or Bun) to run. No bundler or transpiler.
+- **Dev tooling** (never shipped — it lives in the **private** root `package.json`, which the marketplace does not install): ESLint (flat config, `eslint.config.mjs`) + Prettier (`.prettierrc`), driven through the `Makefile`. `make help` lists targets; `make all` runs lint + format + test. Run `npm install` once to fetch the devDependencies. Prettier is scoped to code — `.prettierignore` excludes markdown, `docs/`, `paad/`, `.superpowers/`, and the vendored `claude-hud/`.
+- **Tests:** Node's built-in runner — `npm test` (or `make test`) runs `node --test tests/*.test.mjs`. Single file: `node --test tests/<name>.test.mjs`. The glob is scoped to `tests/` so the vendored `claude-hud/` suite is excluded.
+- No network or credential access at runtime; all tests are local-only.
 
 ## Conventions
 
