@@ -62,12 +62,12 @@ block, and always succeeds even with no collector running.
   in every other state. Gate on this one field instead of inferring setup status
   from `source`/`rate_limits_status`.
 - **session_selection** — how the report decided whose numbers these are:
-  `session_id` (matched this session's own id — the snapshot/transcript is
-  definitively yours); `unverified-snapshot` (this Claude Code build exposed no
+  `session_id` (matched this session's own id — the snapshot and its transcript are
+  definitively yours) or `unverified-snapshot` (this Claude Code build exposed no
   session id, so the newest snapshot was used and may belong to another concurrent
-  same-account session); or `newest-in-cwd-heuristic` (transcript fallback chosen by
-  directory, which can't tell two sessions in the same directory apart). Gate on this
-  when it matters that the context figures are your session's and not a neighbor's.
+  same-account session). Omitted from the JSON in the not-set-up state, where there
+  are no numbers to attribute. Gate on this when it matters that the context figures
+  are your session's and not a neighbor's.
 - **snapshot_age_seconds** — how old the snapshot is (collector mode, or the age
   of a stale snapshot reused in fallback).
 - **model** — the reporting session's model as `{ id, display_name }`. From the
