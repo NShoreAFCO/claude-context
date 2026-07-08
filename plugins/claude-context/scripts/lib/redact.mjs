@@ -19,14 +19,20 @@ export function redactSecrets(command) {
       // Basic-auth URL: mask only the password segment, keep host/path usable in a preview.
       // Any URI scheme (postgres://, redis://, https://, …), not just http(s).
       .replace(/(\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:)([^\s@/]+)(@)/gi, '$1[REDACTED]$3')
+      // Positional / abbreviated-name credentials a foreign command may pass. Over-redaction
+      // is acceptable (module philosophy), so these lean broad — but stay case-sensitive on
+      // `-p` so the uppercase `-P<port>` flag is NOT mistaken for a password, and require the
+      // password to be ATTACHED so a space-separated `-p <dbname>` (prompt mode) is left alone.
+      .replace(/(-u\s+[^\s:]+:)(\S+)/gi, '$1[REDACTED]') // curl -u user:pass (keep the user)
+      .replace(/(^|\s)(-p)(\S+)/g, '$1$2[REDACTED]') // mysql -pSECRET (attached password)
       // Labeled assignment. The name may be an env-var-style identifier that merely CONTAINS a
-      // secret word (e.g. AWS_SECRET_ACCESS_KEY), so match the whole `_`/`-`-joined name — the
-      // plain `\bsecret\b` boundary used before missed those.
+      // secret word (e.g. AWS_SECRET_ACCESS_KEY, MYSQL_PWD, DB_PASS), so match the whole
+      // `_`/`-`-joined name — the plain `\bsecret\b` boundary used before missed those.
       // The value may be double-quoted, single-quoted (either can contain spaces), or an
       // unquoted whitespace-free run. Anchoring the close-quote to the first whitespace-free
       // run (the old `"?…\3`) dropped the whole match on a quoted phrase — leaking it entirely.
       .replace(
-        /\b([A-Za-z0-9_]*(?:key|token|secret|password)[A-Za-z0-9_]*)(\s*[:=]\s*)("[^"]*"|'[^']*'|[^"\s]+)/gi,
+        /\b([A-Za-z0-9_]*(?:key|token|secret|pass(?:word)?|pwd)[A-Za-z0-9_]*)(\s*[:=]\s*)("[^"]*"|'[^']*'|[^"\s]+)/gi,
         (_m, name, sep) => `${name}${sep}[REDACTED]`,
       )
   );

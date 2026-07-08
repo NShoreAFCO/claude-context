@@ -338,7 +338,11 @@ test('teardown: restores a command-less co-existed original verbatim (round-trip
   const r = teardown({ env: { CLAUDE_CONFIG_DIR: cfg } });
   assert.equal(r.action, 'restored-original');
   const settings = readSettingsFile(cfg);
-  assert.deepEqual(settings.statusLine, { type: 'command', padding: 3 }, 'original restored verbatim');
+  assert.deepEqual(
+    settings.statusLine,
+    { type: 'command', padding: 3 },
+    'original restored verbatim',
+  );
   assert.equal(settings.model, 'opus', 'sibling keys preserved');
   assert.equal(
     fs.existsSync(path.join(cfg, 'claude-context', 'coexist.json')),

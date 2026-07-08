@@ -77,6 +77,27 @@ test('redactSecrets masks a labeled quoted secret containing a space (I4)', () =
   assert.doesNotMatch(redactSecrets("secret='one two three'"), /one two three/);
 });
 
+test('redactSecrets masks positional / abbreviated-name credentials (S2)', () => {
+  // mysql-style attached password.
+  const my = redactSecrets('mysql -u root -pMyS3cretPw');
+  assert.doesNotMatch(my, /MyS3cretPw/);
+  assert.match(my, /-p\[REDACTED\]/);
+  // curl -u user:pass — keep the username, mask the password.
+  const curl = redactSecrets('curl -u alice:s3cretpw https://x');
+  assert.doesNotMatch(curl, /s3cretpw/);
+  assert.match(curl, /-u alice:\[REDACTED\]/);
+  // *_PWD / *_PASS env-style assignments.
+  assert.doesNotMatch(redactSecrets('MYSQL_PWD=topsecret cmd'), /topsecret/);
+  assert.doesNotMatch(redactSecrets('DB_PASS=letmein cmd'), /letmein/);
+});
+
+test('redactSecrets does not over-redact the MySQL port flag or a space-separated -p (S2 guard)', () => {
+  // -P (uppercase) is the port, not the password — must survive.
+  assert.match(redactSecrets('mysql -h db -P3306 -u root'), /-P3306/);
+  // A space after -p means "prompt for password"; the next token is the db name, not a secret.
+  assert.match(redactSecrets('mysql -p mydatabase'), /mydatabase/);
+});
+
 test('redactSecrets is total on non-strings', () => {
   assert.equal(redactSecrets(null), '');
   assert.equal(redactSecrets(42), '');
