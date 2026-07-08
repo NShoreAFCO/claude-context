@@ -73,6 +73,15 @@ export async function runCoexist({
     env,
   });
   child.stdin.on('error', () => {}); // a stray write to an already-closed child stdin is expected/harmless; swallow the async EPIPE so it never crashes the wrapper or overrides the original's exit code
+
+  // Attach the exit listeners SYNCHRONOUSLY, before the snapshot's `await` — an exit that
+  // fires during that await can then never be missed (structurally race-free; the loader
+  // timing this depends on is unverified on Bun). We resolve the code but await it last.
+  const exitCode = new Promise((resolve) => {
+    child.on('close', (code) => resolve(typeof code === 'number' ? code : 0));
+    child.on('error', () => resolve(0)); // spawn failure: stay transparent, don't crash
+  });
+
   try {
     child.stdin.write(input);
     child.stdin.end();
@@ -91,10 +100,7 @@ export async function runCoexist({
   }
 
   // Await exit ONLY to propagate the code. The snapshot is already on disk.
-  return await new Promise((resolve) => {
-    child.on('close', (code) => resolve(typeof code === 'number' ? code : 0));
-    child.on('error', () => resolve(0)); // spawn failure: stay transparent, don't crash
-  });
+  return await exitCode;
 }
 
 const isMain = import.meta.url === pathToFileURL(process.argv[1] ?? '').href;

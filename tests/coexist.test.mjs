@@ -160,6 +160,28 @@ test('missing/corrupt sidecar → degrades to our own compact line', async () =>
   assert.equal(out.trim(), 'Context 50%');
 });
 
+test('exit code is captured even when the child closes DURING the snapshot await', async () => {
+  // The exit listeners are attached synchronously before loadSnapshotLib()'s await, so a
+  // close firing inside that await is not lost. (Under the old ordering this test hangs.)
+  const cfg = mkCfg('true');
+  const child = fakeChild();
+  const p = runCoexist({
+    now: 0,
+    readInput: async () => STDIN,
+    env: { CLAUDE_CONFIG_DIR: cfg },
+    spawn: () => child,
+    loadSnapshotLib: async () => {
+      child.fireClose(3); // original exits WHILE the snapshot lib is "loading"
+      return {
+        buildSnapshot: () => ({ session_id: 'sid-cox' }),
+        compactLine: () => 'x',
+        writeSnapshot: () => {},
+      };
+    },
+  });
+  assert.equal(await p, 3, 'a close during the await is captured, not dropped');
+});
+
 test('a throwing stdin read does not reject: the original still spawns, exit propagates', async () => {
   const cfg = mkCfg('true');
   const child = fakeChild();
