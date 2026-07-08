@@ -168,6 +168,16 @@ function writeSidecarAtomic(env, deps, obj) {
   writeFileAtomic(deps, tmp, scp, `${JSON.stringify(obj, null, 2)}\n`, 0o600);
 }
 
+// KNOWN RACE (accepted, unguarded by design): wrap() and teardown() are lock-free,
+// multi-file read-modify-write operations. Each classifies from a snapshot of settings.json
+// taken at its start and then writes without re-validating. If a concurrent /teardown runs
+// to completion between this run's initial read and its write, this run can act on a stale
+// classification (e.g. refresh an `ours-coexist` slot that teardown just restored to the
+// foreign original) and lose that original. Both are agent-invoked slash commands that are
+// rarely fired simultaneously on the same config dir, so the likelihood is low; the fix (an
+// exclusive lockfile, or re-read + re-classify before the final write) was judged not worth
+// its stale-lock/complexity cost at this stage. If concurrent setup/teardown ever becomes
+// common, guard the mutation here.
 export function wrap({
   env = process.env,
   deps = fs,
