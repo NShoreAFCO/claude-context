@@ -120,6 +120,50 @@ Cost: $24.94 · Compactions: 0
 Source: collector · snapshot 3s old
 ```
 
+## How your rules read the numbers
+
+The report returns two shapes of the same reading: the human summary above, and the
+machine-readable JSON an agent branches on (abbreviated here to the fields rules use — the
+full block also carries the token breakdown, `resets_at` timestamps, `model`, and
+`session_selection`):
+
+```json
+{
+  "context":     { "used_percentage": 25, "used_tokens": 245000, "window_size": 1000000, "headroom_tokens": 755000 },
+  "rate_limits": {
+    "five_hour": { "used_percentage": 9, "resets_in_seconds": 8160 },
+    "seven_day": { "used_percentage": 2, "resets_in_seconds": 594000 }
+  },
+  "cost_usd": 24.94,
+  "compactions": 0,
+  "source": "collector",
+  "rate_limits_status": "available",
+  "setup_required": false,
+  "snapshot_age_seconds": 3
+}
+```
+
+An agent doesn't watch these numbers on its own — it reads them only when a rule tells it
+to. So a working rule names *when* to check, *which field* to read, and *your* threshold.
+Put something like this in your `CLAUDE.md`, a skill, or a subagent prompt:
+
+```markdown
+## Resource guardrails
+
+Before starting a new subtask, run `/claude-context` and read the JSON block:
+
+- If `context.used_percentage` is above 50, write the current plan and open decisions
+  to `PROGRESS.md`, then stop for review.
+- Before fanning out subagents, if `rate_limits.five_hour.used_percentage` is above 80,
+  summarize progress and pause instead of spawning them.
+- If `rate_limits.seven_day.used_percentage` is above 80, stop and tell me first.
+- If `setup_required` is true or `rate_limits_status` is not `available`, the number
+  isn't live — say so instead of acting on a stale or missing value.
+```
+
+The thresholds (50, 80) and the actions are yours; the plugin only supplies the fields —
+facts from the tool, policy from you.
+
 ## Turn on live usage and cost
 
 Every number in the report — context health included — comes from the collector, so
