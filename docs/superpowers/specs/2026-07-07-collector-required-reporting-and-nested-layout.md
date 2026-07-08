@@ -225,8 +225,9 @@ edits by *kind* so none is missed — following "update import paths" literally 
 
 ## 8. Non-goals
 
-- No change to the collector (`collect.mjs`) — it already reads the real window from
-  stdin and is untouched.
+- No change to the collector's *snapshot shape* — `collect.mjs` already reads the real
+  window from stdin. (The build did add a statusline "snapshot not saved" write-failure
+  marker to `collect.mjs`; that touches the rendered line, not the captured data.)
 - No change to the fresh-collector or stale-collector output shapes beyond removing
   `window_size_inferred`.
 - No second plugin is added; the catalog simply gains the `plugins/` directory it will
