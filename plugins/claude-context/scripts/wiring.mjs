@@ -102,17 +102,19 @@ function ensureDir(dir, deps, { tighten = false } = {}) {
   }
 }
 
-// Move a temp into place, unlinking the temp if the rename fails so a flaky FS never leaks
-// a per-attempt temp file. The trailing chmod is best-effort — the mode is already applied
-// at temp-write time, so a chmod failure must NOT fail an already-committed write.
-function commitTemp(deps, tmp, dest, mode) {
+// Write `data` to `tmp` then atomically rename it into `dest`, unlinking `tmp` on ANY
+// failure — a partial write on a full/flaky FS (ENOSPC) as well as a failed rename — so a
+// stray per-attempt temp is never left behind. The mode is applied at write time; the
+// trailing chmod is best-effort — it cannot un-commit an already-renamed file.
+function writeFileAtomic(deps, tmp, dest, data, mode) {
   try {
+    deps.writeFileSync(tmp, data, { mode });
     deps.renameSync(tmp, dest);
   } catch (e) {
     try {
       deps.unlinkSync(tmp);
     } catch {
-      /* already gone */
+      /* already gone / never created */
     }
     throw e;
   }
@@ -131,9 +133,14 @@ function backupOnce(env, deps, state) {
   if (state.backedUp) return;
   if (state.rawOriginal != null) {
     const bp = backupPath(env);
-    const tmp = `${bp}.${process.pid}.${state.now}.tmp`;
-    deps.writeFileSync(tmp, state.rawOriginal, { mode: 0o600 });
-    commitTemp(deps, tmp, bp, 0o600);
+    // Write the backup only if one isn't already present. A re-run's (refresh's)
+    // settings.json is our OWN wrapper, not the user's original, so clobbering the stable
+    // backup would replace the true original with a wrapper. teardown removes the backup,
+    // so the next fresh install starts clean.
+    if (!deps.existsSync(bp)) {
+      const tmp = `${bp}.${process.pid}.${state.now}.tmp`;
+      writeFileAtomic(deps, tmp, bp, state.rawOriginal, 0o600);
+    }
   }
   state.backedUp = true;
 }
@@ -150,8 +157,7 @@ function writeSettingsAtomic(env, deps, obj) {
     /* new file */
   }
   const tmp = path.join(dir, `.settings.json.${process.pid}.${Date.now()}.tmp`);
-  deps.writeFileSync(tmp, `${JSON.stringify(obj, null, 2)}\n`, { mode });
-  commitTemp(deps, tmp, sp, mode);
+  writeFileAtomic(deps, tmp, sp, `${JSON.stringify(obj, null, 2)}\n`, mode);
 }
 
 function writeSidecarAtomic(env, deps, obj) {
@@ -159,8 +165,7 @@ function writeSidecarAtomic(env, deps, obj) {
   const dir = path.dirname(scp);
   ensureDir(dir, deps, { tighten: true });
   const tmp = path.join(dir, `.coexist.json.${process.pid}.${Date.now()}.tmp`);
-  deps.writeFileSync(tmp, `${JSON.stringify(obj, null, 2)}\n`, { mode: 0o600 });
-  commitTemp(deps, tmp, scp, 0o600);
+  writeFileAtomic(deps, tmp, scp, `${JSON.stringify(obj, null, 2)}\n`, 0o600);
 }
 
 export function wrap({

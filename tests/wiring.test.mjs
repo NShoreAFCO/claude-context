@@ -131,6 +131,48 @@ test('wrap: writes exactly ONE full-file backup, mode 0600, before mutating', ()
   if (process.platform !== 'win32') assert.equal(fs.statSync(bak).mode & 0o777, 0o600);
 });
 
+test('wrap: a second /setup does not clobber the stable backup with our own wrapper (S1)', () => {
+  // The backup is the last-resort restore of the user's ORIGINAL. A refresh run's
+  // settings.json is our own wrapper, so re-writing the backup would overwrite the true
+  // original with a wrapper. The backup must be written once and left alone until teardown.
+  const cfg = mkCfg();
+  writeSettings(cfg, { statusLine: { type: 'command', command: FOREIGN } });
+  wrap({ env: { CLAUDE_CONFIG_DIR: cfg }, now: 0, runtime: RUNTIME }); // wired-coexist, backup = FOREIGN
+  wrap({ env: { CLAUDE_CONFIG_DIR: cfg }, now: 1, runtime: RUNTIME }); // refreshed-coexist
+  const bak = JSON.parse(
+    fs.readFileSync(path.join(cfg, 'settings.json.claude-context.bak'), 'utf8'),
+  );
+  assert.equal(bak.statusLine.command, FOREIGN, 'backup still holds the original, not the wrapper');
+});
+
+test('wrap: a failing writeFileSync leaves no .tmp file behind (S3)', () => {
+  // The atomic writer must unlink its temp on ANY failure: a failed WRITE (full/flaky FS)
+  // once left a stray per-attempt .tmp because only a failed rename was cleaned up.
+  const cfg = mkCfg();
+  writeSettings(cfg, { statusLine: { type: 'command', command: FOREIGN } });
+  const realWrite = fs.writeFileSync;
+  const deps = {
+    ...fs,
+    writeFileSync: (file, ...rest) => {
+      if (String(file).includes('.tmp')) {
+        realWrite(file, ...rest); // partial temp lands on disk...
+        throw new Error('ENOSPC'); // ...then the write reports failure
+      }
+      return realWrite(file, ...rest);
+    },
+  };
+  assert.throws(() => wrap({ env: { CLAUDE_CONFIG_DIR: cfg }, now: 0, runtime: RUNTIME, deps }));
+  const leftovers = fs
+    .readdirSync(cfg)
+    .concat(
+      fs.existsSync(path.join(cfg, 'claude-context'))
+        ? fs.readdirSync(path.join(cfg, 'claude-context'))
+        : [],
+    )
+    .filter((f) => f.includes('.tmp'));
+  assert.deepEqual(leftovers, [], 'temp file unlinked after the write failed');
+});
+
 test('wrap: foreign slot + missing runtime → throws BEFORE writing any sidecar or backup', () => {
   const cfg = mkCfg();
   writeSettings(cfg, { statusLine: { type: 'command', command: FOREIGN } });
