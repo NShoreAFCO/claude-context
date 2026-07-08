@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ensureDir, writeFileAtomic } from './atomic-write.mjs';
 
-export const WRITE_THROTTLE_MS = 30_000;
+const WRITE_THROTTLE_MS = 30_000;
 export const FRESHNESS_MS = 5 * 60_000;
 
 function withoutUpdatedAt(s) {

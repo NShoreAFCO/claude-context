@@ -16,7 +16,7 @@ export function snapshotDir(env = process.env) {
 // anything unusable (empty, an unsubstituted ${...} template, or a bare dot/dot-dot)
 // so callers can decide the fallback. Real session ids are UUIDs and pass through
 // unchanged; the substitution is a defensive guard against path traversal.
-export function sanitizeSessionId(id) {
+function sanitizeSessionId(id) {
   if (typeof id !== 'string') return null;
   const trimmed = id.trim();
   if (!trimmed || /[${}]/.test(trimmed)) return null;
