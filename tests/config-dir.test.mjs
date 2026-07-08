@@ -77,7 +77,10 @@ test('sidecarPath is coexist.json under claude-context', () => {
 });
 
 test('settingsPath and backupPath sit at the config-dir root', () => {
-  assert.equal(settingsPath({ CLAUDE_CONFIG_DIR: '/tmp/cfg' }), path.join('/tmp/cfg', 'settings.json'));
+  assert.equal(
+    settingsPath({ CLAUDE_CONFIG_DIR: '/tmp/cfg' }),
+    path.join('/tmp/cfg', 'settings.json'),
+  );
   assert.equal(
     backupPath({ CLAUDE_CONFIG_DIR: '/tmp/cfg' }),
     path.join('/tmp/cfg', 'settings.json.claude-context.bak'),

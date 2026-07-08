@@ -10,13 +10,27 @@ import { detectMarker } from '../plugins/claude-context/scripts/lib/marker.mjs';
 
 test('marker round-trips through the built command, for both variants and platforms', () => {
   for (const platform of ['posix', 'gitbash']) {
-    assert.equal(detectMarker(buildStatuslineCommand({ variant: 'collect', runtime: '/usr/bin/node', platform })), 'collect');
-    assert.equal(detectMarker(buildStatuslineCommand({ variant: 'coexist', runtime: '/usr/bin/node', platform })), 'coexist');
+    assert.equal(
+      detectMarker(
+        buildStatuslineCommand({ variant: 'collect', runtime: '/usr/bin/node', platform }),
+      ),
+      'collect',
+    );
+    assert.equal(
+      detectMarker(
+        buildStatuslineCommand({ variant: 'coexist', runtime: '/usr/bin/node', platform }),
+      ),
+      'coexist',
+    );
   }
 });
 
 test('the built command targets the right script and is a single bash -c string', () => {
-  const cmd = buildStatuslineCommand({ variant: 'coexist', runtime: '/usr/bin/node', platform: 'posix' });
+  const cmd = buildStatuslineCommand({
+    variant: 'coexist',
+    runtime: '/usr/bin/node',
+    platform: 'posix',
+  });
   assert.match(cmd, /^bash -c '/);
   assert.match(cmd, /scripts\/coexist\.mjs/);
 });
@@ -34,7 +48,11 @@ test('the built command resolves the newest plugin dir and execs the target scri
   const scriptDir = path.join(cfg, 'plugins', 'cache', 'mk', 'claude-context', '0.3.0', 'scripts');
   fs.mkdirSync(scriptDir, { recursive: true });
   fs.writeFileSync(path.join(scriptDir, 'coexist.mjs'), 'console.log("EXEC-OK");');
-  const cmd = buildStatuslineCommand({ variant: 'coexist', runtime: process.execPath, platform: 'posix' });
+  const cmd = buildStatuslineCommand({
+    variant: 'coexist',
+    runtime: process.execPath,
+    platform: 'posix',
+  });
   const out = execFileSync('bash', ['-c', cmd], {
     input: '{}',
     env: { ...process.env, CLAUDE_CONFIG_DIR: cfg, HOME: cfg },
