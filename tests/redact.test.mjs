@@ -98,6 +98,31 @@ test('redactSecrets does not over-redact the MySQL port flag or a space-separate
   assert.match(redactSecrets('mysql -p mydatabase'), /mydatabase/);
 });
 
+test('redactSecrets masks an Authorization: Basic header (I4)', () => {
+  // base64(user:password) — must not echo into the transcript.
+  const r = redactSecrets('curl -H "Authorization: Basic dXNlcjpwYXNzd29yZA=="');
+  assert.doesNotMatch(r, /dXNlcjpwYXNzd29yZA==/);
+  assert.match(r, /Basic \[REDACTED\]/);
+});
+
+test('redactSecrets masks space-separated secret flags (I5)', () => {
+  assert.doesNotMatch(redactSecrets('statusline --api-key 0123456789abcdef'), /0123456789abcdef/);
+  assert.doesNotMatch(redactSecrets('fetch --password Hunter2Pass!'), /Hunter2Pass!/);
+  assert.doesNotMatch(redactSecrets('x --token abcDEF123 y'), /abcDEF123/);
+  // Quoted space-containing value after the flag, too.
+  assert.doesNotMatch(redactSecrets('run --secret "my phrase here"'), /my phrase here/);
+  // Guards: prompt-mode -p (next token is a db name) and --author are NOT redacted.
+  assert.match(redactSecrets('mysql -p mydatabase'), /mydatabase/);
+  assert.match(redactSecrets('git log --author Jane'), /Jane/);
+});
+
+test('redactSecrets masks a standard-base64 Bearer token with + and / (I6)', () => {
+  // The char class must span +/= or the token is truncated at the first + or /, leaking the rest.
+  const r = redactSecrets('Authorization: Bearer AbC0+xYz/98wQ==');
+  assert.doesNotMatch(r, /xYz|98wQ/);
+  assert.match(r, /Bearer \[REDACTED\]/);
+});
+
 test('redactSecrets is total on non-strings', () => {
   assert.equal(redactSecrets(null), '');
   assert.equal(redactSecrets(42), '');
