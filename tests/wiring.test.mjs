@@ -237,6 +237,8 @@ test('wrap: orphaned sidecar — slot DIFFERS → conflict, no overwrite of the 
   const r = wrap({ env: { CLAUDE_CONFIG_DIR: cfg }, now: 0, runtime: RUNTIME });
   assert.equal(r.action, 'conflict');
   assert.match(r.storedOriginalPreview, /claude-hud|statusline\.js|bun run/);
+  // The orphan sidecar path is surfaced so the user has a recovery path out of the wedge.
+  assert.equal(r.sidecarPath, path.join(cfg, 'claude-context', 'coexist.json'));
   // The slot and the sidecar are both untouched.
   assert.equal(readSettingsFile(cfg).statusLine.command, 'some-third-tool');
   assert.equal(readSidecarFile(cfg).original.command, FOREIGN);
@@ -271,7 +273,18 @@ test('teardown: NEVER clobbers a slot we do not own', () => {
   const r = teardown({ env: { CLAUDE_CONFIG_DIR: cfg } });
   assert.equal(r.action, 'not-ours');
   assert.match(r.storedOriginalPreview, /claude-hud|statusline\.js|bun run/);
+  // Surface the orphan sidecar path so the user knows where the preserved pointer lives.
+  assert.equal(r.sidecarPath, path.join(cfg, 'claude-context', 'coexist.json'));
   assert.equal(readSettingsFile(cfg).statusLine.command, 'third-party-tool', 'slot untouched');
+});
+
+test('teardown: not-ours with no sidecar → sidecarPath null (nothing to surface)', () => {
+  const cfg = mkCfg();
+  writeSettings(cfg, { statusLine: { type: 'command', command: 'third-party-tool' } });
+  const r = teardown({ env: { CLAUDE_CONFIG_DIR: cfg } });
+  assert.equal(r.action, 'not-ours');
+  assert.equal(r.storedOriginalPreview, null);
+  assert.equal(r.sidecarPath, null);
 });
 
 test('teardown: nothing of ours wired → idempotent no-op', () => {

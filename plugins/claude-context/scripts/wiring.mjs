@@ -188,6 +188,9 @@ export function wrap({
       action: 'conflict',
       slot,
       storedOriginalPreview: previewCommand(sidecar.original.command),
+      // Surface the orphan's path: this state is a dead-end until the stale sidecar is
+      // cleared, so the caller (setup.md) can point the user at a recovery.
+      sidecarPath: sidecarPath(env),
     };
   }
   // Fresh foreign wrap: build the wrapper command FIRST (validates runtime before any write),
@@ -250,10 +253,12 @@ export function teardown({ env = process.env, deps = fs } = {}) {
     return { action: 'removed-collect' };
   }
   if (command == null) return { action: 'noop-nothing-wired' };
-  // Non-empty but not our marker: never clobber. Report the stored original if we have one.
+  // Non-empty but not our marker: never clobber. Report the stored original if we have one,
+  // and surface the sidecar path so an orphan can be cleared by hand.
   return {
     action: 'not-ours',
     storedOriginalPreview: sidecar ? previewCommand(sidecar.original.command) : null,
+    sidecarPath: sidecar ? sidecarPath(env) : null,
   };
 }
 

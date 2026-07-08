@@ -28,6 +28,8 @@ restart Claude Code** if anything changed:
   we removed our entry (slot empty). Nothing else to restore.
 - `not-ours` — the slot no longer carries our marker (another tool or you changed it); we did
   **not** touch it. If `storedOriginalPreview` is shown, that is the statusline we had
-  preserved — restore it by hand if you want it back.
+  preserved (its file is given in `sidecarPath`) — restore it by hand if you want it back, then
+  delete that `coexist.json` (`rm` it) to clear the orphaned pointer so a future
+  `/claude-context:setup` starts clean.
 - `noop-nothing-wired` — nothing of ours was wired; no change.
 - `error` — `settings.json` is unparseable; fix or remove it, then re-run.

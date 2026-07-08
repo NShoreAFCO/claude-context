@@ -72,8 +72,14 @@ The detector prints one JSON line: `{ "slot", "preview", "hasSidecar", "sidecarM
     numbers until setup runs and co-exists (with a foreign tool owning the slot and no
     snapshot ever written, there is nothing to report yet).
 - **`slot: "foreign"` with `hasSidecar: true` and `sidecarMatchesSlot: false`** → a preserved
-  statusline already exists but the slot now holds something we don't recognize. Do **not**
-  overwrite. Report the facts and show `storedOriginalPreview` so the user can decide. Stop.
+  statusline already exists but the slot now holds something we don't recognize (an interrupted
+  or bad earlier setup can leave this). Do **not** overwrite. Report the facts and show
+  `storedOriginalPreview`. This state **blocks co-existence** until the stale sidecar is cleared,
+  so give the user the recovery: the sidecar lives at
+  `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/claude-context/coexist.json`, and deleting it (`rm` that
+  file) lets a re-run of `/claude-context:setup` co-exist with whatever now owns the slot. That
+  only discards claude-context's saved pointer to the *previous* original — it does not touch
+  the current statusline. Stop.
 - **`slot: "error"`** → `settings.json` is unparseable; do not touch it. Tell the user to fix
   or remove it, then re-run. Stop.
 
@@ -88,7 +94,9 @@ write, then performs an atomic settings write (and, for a foreign slot, stores t
 original `statusLine` object in `coexist.json` first). It prints one JSON line with `action`
 (`wired-collect` / `wired-coexist` / `resumed-coexist` / `refreshed-collect` /
 `refreshed-coexist` / `conflict` / `error`). Report the outcome and tell the user to **fully
-restart Claude Code**. If `action` is `conflict` or `error`, report it and do not retry.
+restart Claude Code**. If `action` is `conflict` or `error`, report it and do not retry — a
+`conflict` also carries `sidecarPath` (the stale `coexist.json` to `rm` per the Step 3
+conflict recovery) before any re-run.
 
 ## Step 5: Verify a snapshot appears
 
