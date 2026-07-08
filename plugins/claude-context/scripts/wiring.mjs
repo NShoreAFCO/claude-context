@@ -138,11 +138,15 @@ function writeSidecarAtomic(env, deps, obj) {
 // taken at its start and then writes without re-validating. If a concurrent /teardown runs
 // to completion between this run's initial read and its write, this run can act on a stale
 // classification (e.g. refresh an `ours-coexist` slot that teardown just restored to the
-// foreign original) and lose that original. Both are agent-invoked slash commands that are
-// rarely fired simultaneously on the same config dir, so the likelihood is low; the fix (an
+// foreign original) and lose that original. The same read→write window can also lose a
+// concurrent THIRD-PARTY write to settings.json — Claude Code persisting a `/config` change,
+// or a hand edit — that lands after this run's read: the whole-file rewrite here is built from
+// the stale in-memory copy, so that unrelated edit is silently dropped. Both our commands are
+// agent-invoked and rarely fired simultaneously, and a concurrent foreign write to the same
+// file in the sub-millisecond window is rarer still, so the likelihood is low; the fix (an
 // exclusive lockfile, or re-read + re-classify before the final write) was judged not worth
-// its stale-lock/complexity cost at this stage. If concurrent setup/teardown ever becomes
-// common, guard the mutation here.
+// its stale-lock/complexity cost at this stage. If any of these races ever becomes common,
+// guard the mutation here.
 export function wrap({ env = process.env, deps = fs, now = Date.now(), runtime } = {}) {
   const sp = settingsPath(env);
   const { raw, exists, settings } = readSettings(sp, deps);
