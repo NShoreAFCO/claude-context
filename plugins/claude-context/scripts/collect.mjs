@@ -4,6 +4,7 @@ import { usedTokens, percentage } from './lib/token-math.mjs';
 import { epochToMs } from './lib/time.mjs';
 import { writeSnapshot } from './lib/snapshot.mjs';
 import { snapshotPath } from './lib/config-dir.mjs';
+import { readStdin, parseStdinJson } from './lib/stdin.mjs';
 
 function num(v) {
   return typeof v === 'number' && Number.isFinite(v) ? v : 0;
@@ -72,12 +73,6 @@ export function compactLine(snapshot) {
   return parts.join(' · ');
 }
 
-async function readStdin() {
-  const chunks = [];
-  for await (const chunk of process.stdin) chunks.push(chunk);
-  return Buffer.concat(chunks).toString('utf8');
-}
-
 export async function runCli({
   argv = process.argv,
   now = Date.now(),
@@ -87,12 +82,8 @@ export async function runCli({
   write = (s) => process.stdout.write(s),
 } = {}) {
   const silent = argv.includes('--silent');
-  let stdin;
-  try {
-    stdin = JSON.parse(await readInput());
-  } catch {
-    stdin = {};
-  }
+  // readStdin is guarded (returns '' on a stream error) and parseStdinJson falls back to {}.
+  const stdin = parseStdinJson(await readInput());
   const snapshot = buildSnapshot(stdin, now);
   // Key by this session's id (from stdin) so concurrent same-account sessions each
   // write their own file instead of thrashing one shared snapshot.

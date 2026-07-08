@@ -160,6 +160,33 @@ test('missing/corrupt sidecar → degrades to our own compact line', async () =>
   assert.equal(out.trim(), 'Context 50%');
 });
 
+test('a throwing stdin read does not reject: the original still spawns, exit propagates', async () => {
+  const cfg = mkCfg('true');
+  const child = fakeChild();
+  let spawned = 0;
+  const p = runCoexist({
+    now: 0,
+    readInput: async () => {
+      throw new Error('stdin error');
+    },
+    env: { CLAUDE_CONFIG_DIR: cfg },
+    spawn: () => {
+      spawned++;
+      return child;
+    },
+    loadSnapshotLib: async () => ({
+      buildSnapshot: () => ({ session_id: 'sid-cox' }),
+      compactLine: () => 'x',
+      writeSnapshot: () => {},
+    }),
+  });
+  await tick();
+  assert.equal(spawned, 1, 'child still spawned despite the stdin read throwing');
+  assert.equal(child.stdin.data, '', 'empty input forwarded, not a crash');
+  child.fireClose(0);
+  assert.equal(await p, 0);
+});
+
 // --- Integration tests (real `node coexist.mjs` subprocess: true stdio inherit) ---
 
 function runWrapper(cfg, stdinStr) {

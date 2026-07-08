@@ -3,12 +3,7 @@ import fs from 'node:fs';
 import { spawn as nodeSpawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { sidecarPath, snapshotPath } from './lib/config-dir.mjs';
-
-async function readStdin() {
-  const chunks = [];
-  for await (const chunk of process.stdin) chunks.push(chunk);
-  return Buffer.concat(chunks).toString('utf8');
-}
+import { readStdin, parseStdinJson } from './lib/stdin.mjs';
 
 // Returns the sidecar object only when it stores a usable original command; else null.
 function readSidecar(env, deps) {
@@ -33,14 +28,6 @@ async function defaultLoadSnapshotLib() {
   };
 }
 
-function parse(input) {
-  try {
-    return JSON.parse(input);
-  } catch {
-    return {};
-  }
-}
-
 export async function runCoexist({
   now = Date.now(),
   readInput = readStdin,
@@ -50,7 +37,15 @@ export async function runCoexist({
   write = (s) => process.stdout.write(s),
   loadSnapshotLib = defaultLoadSnapshotLib,
 } = {}) {
-  const input = await readInput();
+  // Guarded read: a stdin 'error' must not reject before we can spawn the original (that
+  // would blank the user's statusline). The default readStdin already swallows it; this
+  // also covers an injected reader.
+  let input = '';
+  try {
+    input = await readInput();
+  } catch {
+    /* proceed with empty input; the wrapped original still runs */
+  }
   const sidecar = readSidecar(env, deps);
 
   // Degraded half-state: wired to coexist but no usable sidecar. Show OUR line (not a
@@ -58,7 +53,7 @@ export async function runCoexist({
   if (!sidecar) {
     try {
       const { buildSnapshot, compactLine, writeSnapshot } = await loadSnapshotLib();
-      const snapshot = buildSnapshot(parse(input), now);
+      const snapshot = buildSnapshot(parseStdinJson(input), now);
       try {
         writeSnapshot(snapshotPath(snapshot.session_id, env), snapshot, { now, deps });
       } catch {
@@ -89,7 +84,7 @@ export async function runCoexist({
   // original never strands our data.
   try {
     const { buildSnapshot, writeSnapshot } = await loadSnapshotLib();
-    const snapshot = buildSnapshot(parse(input), now);
+    const snapshot = buildSnapshot(parseStdinJson(input), now);
     writeSnapshot(snapshotPath(snapshot.session_id, env), snapshot, { now, deps });
   } catch {
     /* best-effort; never affects the child */
@@ -104,5 +99,11 @@ export async function runCoexist({
 
 const isMain = import.meta.url === pathToFileURL(process.argv[1] ?? '').href;
 if (isMain) {
-  process.exit(await runCoexist());
+  // Fail safe: any pre-spawn crash exits 0 (no line this tick, recovered next tick) rather
+  // than a non-zero crash that could be read as the wrapped original failing.
+  try {
+    process.exit(await runCoexist());
+  } catch {
+    process.exit(0);
+  }
 }
