@@ -211,6 +211,31 @@ test('wrap: a bare-string settings.json is unparseable, never spread into an obj
   );
 });
 
+test('wrap: backs up the settings read at start, not a concurrent re-read', () => {
+  // Simulates a second /setup overwriting settings.json AFTER this run's first read: the
+  // backup must still hold the ORIGINAL, since teardown/restore of last resort depends on it.
+  const cfg = mkCfg();
+  const sp = path.join(cfg, 'settings.json');
+  const ORIGINAL = JSON.stringify({ statusLine: { type: 'command', command: FOREIGN } }, null, 2);
+  fs.writeFileSync(sp, ORIGINAL);
+  let reads = 0;
+  const deps = {
+    ...fs,
+    readFileSync(file, ...rest) {
+      if (file === sp) {
+        reads += 1;
+        return reads === 1
+          ? ORIGINAL
+          : JSON.stringify({ statusLine: { type: 'command', command: 'CONCURRENT-WRAPPER' } });
+      }
+      return fs.readFileSync(file, ...rest);
+    },
+  };
+  wrap({ env: { CLAUDE_CONFIG_DIR: cfg }, now: 0, runtime: RUNTIME, deps });
+  const bak = JSON.parse(fs.readFileSync(path.join(cfg, 'settings.json.claude-context.bak'), 'utf8'));
+  assert.equal(bak.statusLine.command, FOREIGN, 'backup holds the original, not a re-read wrapper');
+});
+
 test('wrap: idempotent for already-ours via marker, never nests', () => {
   const cfg = mkCfg();
   writeSettings(cfg, { statusLine: { type: 'command', command: COEXIST } });

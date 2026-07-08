@@ -7,18 +7,39 @@ import { detectMarker } from './lib/marker.mjs';
 import { buildStatuslineCommand } from './lib/command.mjs';
 import { previewCommand } from './lib/redact.mjs';
 
-// Returns the parsed object, or undefined if the file is missing, unparseable, OR not a
-// plain object. A bare-string/array/number JSON is not a usable settings.json and must not
-// be spread into (that corrupts it into indexed-char keys), so it degrades to "unparseable"
-// — callers distinguish missing from unparseable with existsSync and never overwrite the latter.
-function readJson(file, deps) {
+// Parse to a plain object, or undefined for missing/unparseable/non-object input. A
+// bare-string/array/number JSON is not a usable settings.json and must not be spread into
+// (that corrupts it into indexed-char keys), so it degrades to "unparseable".
+function parsePlainObject(text) {
   try {
-    const parsed = JSON.parse(deps.readFileSync(file, 'utf8'));
+    const parsed = JSON.parse(text);
     if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
     return parsed;
   } catch {
     return undefined;
   }
+}
+// Returns the parsed object, or undefined if the file is missing OR not a usable object.
+// Callers distinguish missing from unparseable with existsSync and never overwrite the latter.
+function readJson(file, deps) {
+  try {
+    return parsePlainObject(deps.readFileSync(file, 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
+// Read settings.json ONCE, returning the raw bytes (for a verbatim backup) alongside the
+// parsed object. Reading the raw content here — rather than re-reading it inside backupOnce —
+// keeps a concurrent /setup from backing up the OTHER run's already-written wrapper.
+function readSettings(sp, deps) {
+  const exists = deps.existsSync(sp);
+  let raw;
+  try {
+    raw = deps.readFileSync(sp, 'utf8');
+  } catch {
+    raw = null;
+  }
+  return { raw, exists, settings: raw == null ? undefined : parsePlainObject(raw) };
 }
 function currentCommand(settings) {
   const c = settings?.statusLine?.command;
@@ -98,15 +119,16 @@ function commitTemp(deps, tmp, dest, mode) {
   }
 }
 
-// Copy settings.json to the single stable 0600 backup — exactly once per run, and only
-// if there is a file to protect. state.backedUp guards the "before the FIRST write" rule.
+// Write the single stable 0600 backup — exactly once per run, and only if there was a file
+// to protect. Backs up state.rawOriginal (the bytes captured when this run first read
+// settings.json), NOT a fresh read a concurrent /setup could have already overwritten.
+// state.backedUp guards the "before the FIRST write" rule.
 function backupOnce(env, deps, state) {
   if (state.backedUp) return;
-  const sp = settingsPath(env);
-  if (deps.existsSync(sp)) {
+  if (state.rawOriginal != null) {
     const bp = backupPath(env);
     const tmp = `${bp}.${process.pid}.${state.now}.tmp`;
-    deps.writeFileSync(tmp, deps.readFileSync(sp), { mode: 0o600 });
+    deps.writeFileSync(tmp, state.rawOriginal, { mode: 0o600 });
     commitTemp(deps, tmp, bp, 0o600);
   }
   state.backedUp = true;
@@ -145,13 +167,13 @@ export function wrap({
   platform = 'posix',
 } = {}) {
   const sp = settingsPath(env);
-  const settings = readJson(sp, deps);
-  if (settings === undefined && deps.existsSync(sp))
+  const { raw, exists, settings } = readSettings(sp, deps);
+  if (settings === undefined && exists)
     return { action: 'error', reason: 'unparseable-settings' };
   const base = settings ?? {};
   const command = currentCommand(base);
   const slot = classify(command, base.statusLine != null);
-  const state = { backedUp: false, now };
+  const state = { backedUp: false, now, rawOriginal: raw };
 
   const setVariant = (variant) => {
     // Build (and thus validate runtime) BEFORE any disk write, so a bad runtime never leaves
@@ -218,14 +240,14 @@ function removeIfPresent(file, deps) {
 
 export function teardown({ env = process.env, deps = fs } = {}) {
   const sp = settingsPath(env);
-  const settings = readJson(sp, deps);
-  if (settings === undefined && deps.existsSync(sp))
+  const { raw, exists, settings } = readSettings(sp, deps);
+  if (settings === undefined && exists)
     return { action: 'error', reason: 'unparseable-settings' };
   const base = settings ?? {};
   const command = currentCommand(base);
   const marker = command == null ? null : detectMarker(command);
   const sidecar = readSidecar(env, deps);
-  const state = { backedUp: false, now: Date.now() };
+  const state = { backedUp: false, now: Date.now(), rawOriginal: raw };
 
   if (marker === 'coexist') {
     if (sidecar) {
