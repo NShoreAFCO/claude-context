@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0
+
+- **Co-existing statusline.** `/claude-context:setup` now wraps an existing (foreign)
+  statusline instead of offering replace-or-keep: both run, your displayed line is unchanged,
+  and the new `/claude-context:teardown` restores the original verbatim. Setup never replaces
+  or seizes a slot it doesn't own.
+- **New `/claude-context:teardown` command.**
+- **BREAKING (native PowerShell/cmd):** this release removes the empty-slot PowerShell
+  collector shipped in 0.2.0. Native PowerShell/cmd is unsupported this alpha; setup makes no
+  settings change there. Use Git Bash for live numbers. POSIX and Windows + Git Bash are
+  wired as before (now via the tested `wiring.mjs` module).
+
 ## 0.2.0
 
 - Reporting now requires the collector: with no snapshot ever written, the report
