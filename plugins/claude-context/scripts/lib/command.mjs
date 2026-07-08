@@ -25,8 +25,9 @@ function shSingleQuote(body) {
 // No `platform` knob: the version-resolution glob is identical on POSIX and Git Bash, so
 // there is nothing to select. Re-add one only if a target shell needs a different glob.
 export function buildStatuslineCommand({ variant, runtime }) {
-  if (variant !== 'collect' && variant !== 'coexist') throw new Error(`bad variant: ${variant}`);
   if (typeof runtime !== 'string' || runtime.trim() === '') throw new Error('runtime required');
+  // markerAssignment throws on any non-collect/coexist variant before it reaches the script
+  // path below, so no separate variant guard is needed here.
   const marker = markerAssignment(variant); // CLAUDE_CONTEXT_WRAPPER=<variant>
   // bun auto-loads the project's .env on every tick (cwd = project dir); a stray
   // CLAUDE_CONFIG_DIR or NODE_OPTIONS there would poison the collector. Neutralize it (I2).

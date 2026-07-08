@@ -224,13 +224,18 @@ export function teardown({ env = process.env, deps = fs } = {}) {
   const marker = command == null ? null : detectMarker(command);
   const sidecar = readSidecar(env, deps);
   const state = { backedUp: false, now: Date.now(), rawOriginal: raw };
+  // Every terminal teardown branch clears both our artifacts (the sidecar pointer and the
+  // full-file backup); do it in one place so a new branch can't forget one.
+  const clearArtifacts = () => {
+    removeIfPresent(sidecarPath(env), deps);
+    removeIfPresent(backupPath(env), deps);
+  };
 
   if (marker === 'coexist') {
     if (sidecar) {
       backupOnce(env, deps, state);
       writeSettingsAtomic(env, deps, { ...base, statusLine: sidecar.original });
-      removeIfPresent(sidecarPath(env), deps);
-      removeIfPresent(backupPath(env), deps);
+      clearArtifacts();
       return { action: 'restored-original' };
     }
     // Sidecar lost, but the 0600 backup is a verbatim copy of the pre-setup settings.json —
@@ -241,8 +246,7 @@ export function teardown({ env = process.env, deps = fs } = {}) {
     if (backup && 'statusLine' in backup) {
       backupOnce(env, deps, state);
       writeSettingsAtomic(env, deps, { ...base, statusLine: backup.statusLine });
-      removeIfPresent(sidecarPath(env), deps);
-      removeIfPresent(backupPath(env), deps);
+      clearArtifacts();
       return { action: 'restored-from-backup' };
     }
     // No sidecar AND no usable backup — genuinely nothing to restore. Back to empty, and clear
@@ -251,8 +255,7 @@ export function teardown({ env = process.env, deps = fs } = {}) {
     const next = { ...base };
     delete next.statusLine;
     writeSettingsAtomic(env, deps, next);
-    removeIfPresent(sidecarPath(env), deps);
-    removeIfPresent(backupPath(env), deps);
+    clearArtifacts();
     return { action: 'coexist-no-sidecar-removed' };
   }
   if (marker === 'collect') {
@@ -260,8 +263,7 @@ export function teardown({ env = process.env, deps = fs } = {}) {
     const next = { ...base };
     delete next.statusLine;
     writeSettingsAtomic(env, deps, next);
-    removeIfPresent(sidecarPath(env), deps);
-    removeIfPresent(backupPath(env), deps);
+    clearArtifacts();
     return { action: 'removed-collect' };
   }
   if (command == null) return { action: 'noop-nothing-wired' };
