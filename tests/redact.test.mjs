@@ -39,6 +39,44 @@ test('redactSecrets masks the additional secret shapes a foreign command may emb
   );
 });
 
+test('redactSecrets masks non-HTTP connection-string passwords (I2)', () => {
+  // A foreign statusline that shells out to a DB/cache embeds a connection string; its
+  // password must not echo raw. The scheme anchor must cover any URI scheme, not just http(s).
+  for (const url of [
+    'postgres://admin:S3cr3tPass@db/mydb',
+    'mysql://root:hunter2pw@127.0.0.1:3306/app',
+    'redis://user:r3disPass@cache:6379',
+    'mongodb://svc:m0ngoPass@mongo/db',
+  ]) {
+    const r = redactSecrets(`run ${url}`);
+    assert.doesNotMatch(r, /S3cr3tPass|hunter2pw|r3disPass|m0ngoPass/, `password leaked: ${url}`);
+    assert.match(r, /\[REDACTED\]/);
+  }
+  // Host/path stay usable in the preview.
+  assert.match(redactSecrets('psql postgres://admin:S3cr3tPass@db/mydb'), /db\/mydb/);
+});
+
+test('redactSecrets masks github_pat_ PATs and xapp-/xoxe- Slack tokens (I3)', () => {
+  assert.doesNotMatch(
+    redactSecrets('gh auth github_pat_11ABCDEF0123456789_abcdefghijKLMNOPqrstuvwx'),
+    /github_pat_11ABCDEF0123456789/,
+  );
+  assert.doesNotMatch(redactSecrets('slack xapp-1-ABC-123-xyzABCdefGHI'), /xyzABCdefGHI/);
+  assert.doesNotMatch(redactSecrets('slack xoxe-1-abcdEFGHijklMNOP'), /abcdEFGHijklMNOP/);
+});
+
+test('redactSecrets masks a labeled quoted secret containing a space (I4)', () => {
+  // A quoted value with a space must not slip through the label rule untouched.
+  const a = redactSecrets('password="my secret phrase"');
+  assert.doesNotMatch(a, /my secret phrase/);
+  assert.match(a, /password=\[REDACTED\]/);
+  const b = redactSecrets('api_token="abc def ghi"');
+  assert.doesNotMatch(b, /abc def ghi/);
+  assert.match(b, /api_token=\[REDACTED\]/);
+  // Single-quoted values with spaces too.
+  assert.doesNotMatch(redactSecrets("secret='one two three'"), /one two three/);
+});
+
 test('redactSecrets is total on non-strings', () => {
   assert.equal(redactSecrets(null), '');
   assert.equal(redactSecrets(42), '');
