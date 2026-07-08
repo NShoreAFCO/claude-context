@@ -39,24 +39,33 @@ export function snapshotPath(sessionId, env = process.env) {
 // `--session-id ${CLAUDE_SESSION_ID}` (substituted since Claude Code v2.1.9), or
 // the CLAUDE_CODE_SESSION_ID env var, or neither (older versions) — in which case
 // it falls back to the newest snapshot / cwd heuristic with honest provenance.
+// Trim and reject anything unusable as a session id: a non-string, empty/whitespace, or
+// an unsubstituted ${...} template. Returns the clean id, or null so a caller can fall through.
+function usableSessionId(val) {
+  if (typeof val !== 'string') return null;
+  const trimmed = val.trim();
+  if (!trimmed || /[${}]/.test(trimmed)) return null;
+  return trimmed;
+}
+
 export function resolveSessionId({ argv = [], env = {} } = {}) {
-  let val = null;
+  let argVal = null;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--session-id') {
-      val = argv[i + 1] ?? null;
+      argVal = argv[i + 1] ?? null;
       break;
     }
     if (typeof a === 'string' && a.startsWith('--session-id=')) {
-      val = a.slice('--session-id='.length);
+      argVal = a.slice('--session-id='.length);
       break;
     }
   }
-  if (val == null) val = env.CLAUDE_CODE_SESSION_ID ?? null;
-  if (typeof val !== 'string') return null;
-  const trimmed = val.trim();
-  if (!trimmed || /[${}]/.test(trimmed)) return null; // reject unsubstituted templates
-  return trimmed;
+  // arg → env → null. An arg that is present but UNUSABLE (empty, or the literal
+  // `${CLAUDE_SESSION_ID}` on a build that doesn't expand it) must fall THROUGH to the env
+  // var, not short-circuit the chain to null — otherwise the arg→env→newest fallback that
+  // preserves session identity breaks in the middle and degrades to a neighbor's snapshot (I1).
+  return usableSessionId(argVal) ?? usableSessionId(env.CLAUDE_CODE_SESSION_ID) ?? null;
 }
 
 // The co-existence sidecar: stores the entire original statusLine object so teardown
