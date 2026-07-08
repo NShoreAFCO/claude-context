@@ -29,7 +29,7 @@ were relying on. This isn't hypothetical; it's a recurring, documented failure:
 An agent working blind hits that wall at full speed. An agent that can **watch its
 own context percentage** doesn't. Give it a rule —
 
-> *"Before context passes 70%, write the current plan and key decisions to
+> *"Before context passes 50%, write the current plan and key decisions to
 > `PROGRESS.md`, then stop for review."*
 > *"Don't start a new subtask above 40% context."*
 
