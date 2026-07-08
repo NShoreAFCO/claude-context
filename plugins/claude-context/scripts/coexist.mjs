@@ -77,6 +77,7 @@ export async function runCoexist({
     stdio: ['pipe', 'inherit', 'inherit'],
     env,
   });
+  child.stdin.on('error', () => {}); // a stray write to an already-closed child stdin is expected/harmless; swallow the async EPIPE so it never crashes the wrapper or overrides the original's exit code
   try {
     child.stdin.write(input);
     child.stdin.end();

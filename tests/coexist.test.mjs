@@ -45,6 +45,9 @@ function fakeChild() {
       end() {
         this.ended = true;
       },
+      on() {
+        return this;
+      }, // real child.stdin is a stream; the wrapper attaches an 'error' handler
     },
     on(ev, cb) {
       h[ev] = cb;
@@ -191,4 +194,58 @@ test('runtime-failed original: transparent pass-through, exit propagated, snapsh
   assert.equal(r.status, 3, "the original's exit code is propagated");
   assert.equal(r.stdout, '', 'we do NOT substitute our own line for a failing original');
   assert.ok(fs.existsSync(snapFile(cfg)), 'snapshot written regardless of child outcome');
+});
+
+test('broken-pipe original (large payload, child ignores stdin) never crashes the wrapper; exit code propagated + snapshot written', () => {
+  // The original exits immediately without reading stdin. A ~4MB write cannot fit the OS
+  // pipe buffer of an already-exited child, so Node emits an async 'error' (EPIPE) on
+  // child.stdin. Without the child.stdin.on('error', ...) handler that async error would
+  // crash the wrapper (exit 1/null), overriding the original's real code and possibly
+  // firing before the snapshot is durable. The payload stays VALID JSON (session_id intact).
+  const cfg = mkCfg('exit 3'); // fast-exiting original that does not read stdin
+  const big = JSON.stringify({
+    session_id: 'sid-cox',
+    context_window: { context_window_size: 200000, current_usage: { input_tokens: 100000 } },
+    _pad: 'x'.repeat(4_000_000),
+  });
+  const r = runWrapper(cfg, big);
+  assert.equal(r.status, 3, "the original's code is propagated — NOT a wrapper crash (1/null)");
+  assert.ok(fs.existsSync(snapFile(cfg)), 'snapshot survived the broken pipe');
+});
+
+test('degraded branch also triggers for a MALFORMED-JSON sidecar (no spawn, code 0, our line)', async () => {
+  const cfg = mkCfg('true'); // seed a valid sidecar dir/file, then corrupt it
+  fs.writeFileSync(path.join(cfg, 'claude-context', 'coexist.json'), '{ not valid json');
+  let out = '';
+  const code = await runCoexist({
+    now: 0,
+    readInput: async () => STDIN,
+    env: { CLAUDE_CONFIG_DIR: cfg },
+    spawn: () => {
+      throw new Error('must not spawn in degraded mode');
+    },
+    write: (s) => {
+      out += s;
+    },
+  });
+  assert.equal(code, 0);
+  assert.equal(out.trim(), 'Context 50%');
+});
+
+test('degraded branch also triggers for a BLANK original.command (no spawn, code 0, our line)', async () => {
+  const cfg = mkCfg(''); // sidecar exists but original.command is ''
+  let out = '';
+  const code = await runCoexist({
+    now: 0,
+    readInput: async () => STDIN,
+    env: { CLAUDE_CONFIG_DIR: cfg },
+    spawn: () => {
+      throw new Error('must not spawn in degraded mode');
+    },
+    write: (s) => {
+      out += s;
+    },
+  });
+  assert.equal(code, 0);
+  assert.equal(out.trim(), 'Context 50%');
 });
