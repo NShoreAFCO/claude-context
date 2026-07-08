@@ -1,6 +1,7 @@
 // scripts/wiring.mjs
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { settingsPath, sidecarPath, backupPath } from './lib/config-dir.mjs';
 import { detectMarker } from './lib/marker.mjs';
 import { buildStatuslineCommand } from './lib/command.mjs';
@@ -170,4 +171,74 @@ export function wrap({
   return { action: 'wired-coexist', slot };
 }
 
-// teardown() and CLI dispatch are added in Task 8.
+function removeIfPresent(file, deps) {
+  try {
+    deps.rmSync(file, { force: true });
+  } catch {
+    /* already gone */
+  }
+}
+
+export function teardown({ env = process.env, deps = fs } = {}) {
+  const sp = settingsPath(env);
+  const settings = readJson(sp, deps);
+  if (settings === undefined && deps.existsSync(sp))
+    return { action: 'error', reason: 'unparseable-settings' };
+  const base = settings ?? {};
+  const command = currentCommand(base);
+  const marker = command == null ? null : detectMarker(command);
+  const sidecar = readSidecar(env, deps);
+  const state = { backedUp: false, now: Date.now() };
+
+  if (marker === 'coexist') {
+    if (sidecar) {
+      backupOnce(env, deps, state);
+      writeSettingsAtomic(env, deps, { ...base, statusLine: sidecar.original });
+      removeIfPresent(sidecarPath(env), deps);
+      removeIfPresent(backupPath(env), deps);
+      return { action: 'restored-original' };
+    }
+    // Our wrapper is wired but the sidecar is gone — nothing to restore. Back to empty.
+    backupOnce(env, deps, state);
+    const next = { ...base };
+    delete next.statusLine;
+    writeSettingsAtomic(env, deps, next);
+    removeIfPresent(backupPath(env), deps);
+    return { action: 'coexist-no-sidecar-removed' };
+  }
+  if (marker === 'collect') {
+    backupOnce(env, deps, state);
+    const next = { ...base };
+    delete next.statusLine;
+    writeSettingsAtomic(env, deps, next);
+    removeIfPresent(sidecarPath(env), deps);
+    removeIfPresent(backupPath(env), deps);
+    return { action: 'removed-collect' };
+  }
+  if (command == null) return { action: 'noop-nothing-wired' };
+  // Non-empty but not our marker: never clobber. Report the stored original if we have one.
+  return {
+    action: 'not-ours',
+    storedOriginalPreview: sidecar ? previewCommand(sidecar.original.command) : null,
+  };
+}
+
+function argValue(argv, name) {
+  const i = argv.indexOf(name);
+  return i >= 0 ? argv[i + 1] : undefined;
+}
+
+const isMain = import.meta.url === pathToFileURL(process.argv[1] ?? '').href;
+if (isMain) {
+  const sub = process.argv[2];
+  let result;
+  if (sub === 'detect') result = detect();
+  else if (sub === 'wrap') {
+    result = wrap({
+      runtime: argValue(process.argv, '--runtime'),
+      platform: argValue(process.argv, '--platform') ?? 'posix',
+    });
+  } else if (sub === 'teardown') result = teardown();
+  else result = { action: 'error', reason: `unknown subcommand: ${sub ?? '(none)'}` };
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+}

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { detect, wrap } from '../plugins/claude-context/scripts/wiring.mjs';
+import { detect, wrap, teardown } from '../plugins/claude-context/scripts/wiring.mjs';
 import { detectMarker } from '../plugins/claude-context/scripts/lib/marker.mjs';
 
 function mkCfg() {
@@ -142,4 +142,40 @@ test('wrap: orphaned sidecar — slot DIFFERS → conflict, no overwrite of the 
   // The slot and the sidecar are both untouched.
   assert.equal(readSettingsFile(cfg).statusLine.command, 'some-third-tool');
   assert.equal(readSidecarFile(cfg).original.command, FOREIGN);
+});
+
+test('teardown: coexist + sidecar → restores the original verbatim, removes sidecar + backup', () => {
+  const cfg = mkCfg();
+  writeSettings(cfg, { model: 'opus', statusLine: { type: 'command', command: COEXIST } });
+  writeSidecar(cfg, { type: 'command', command: FOREIGN, padding: 2 });
+  fs.writeFileSync(path.join(cfg, 'settings.json.claude-context.bak'), '{}');
+  const r = teardown({ env: { CLAUDE_CONFIG_DIR: cfg } });
+  assert.equal(r.action, 'restored-original');
+  const settings = readSettingsFile(cfg);
+  assert.deepEqual(settings.statusLine, { type: 'command', command: FOREIGN, padding: 2 });
+  assert.equal(settings.model, 'opus', 'other keys preserved');
+  assert.equal(fs.existsSync(path.join(cfg, 'claude-context', 'coexist.json')), false);
+  assert.equal(fs.existsSync(path.join(cfg, 'settings.json.claude-context.bak')), false);
+});
+
+test('teardown: bare collect marker (empty-slot install) → removes our statusLine entry', () => {
+  const cfg = mkCfg();
+  writeSettings(cfg, { statusLine: { type: 'command', command: COLLECT } });
+  const r = teardown({ env: { CLAUDE_CONFIG_DIR: cfg } });
+  assert.equal(r.action, 'removed-collect');
+  assert.equal('statusLine' in readSettingsFile(cfg), false);
+});
+
+test('teardown: NEVER clobbers a slot we do not own', () => {
+  const cfg = mkCfg();
+  writeSettings(cfg, { statusLine: { type: 'command', command: 'third-party-tool' } });
+  writeSidecar(cfg, { type: 'command', command: FOREIGN });
+  const r = teardown({ env: { CLAUDE_CONFIG_DIR: cfg } });
+  assert.equal(r.action, 'not-ours');
+  assert.match(r.storedOriginalPreview, /claude-hud|statusline\.js|bun run/);
+  assert.equal(readSettingsFile(cfg).statusLine.command, 'third-party-tool', 'slot untouched');
+});
+
+test('teardown: nothing of ours wired → idempotent no-op', () => {
+  assert.equal(teardown({ env: { CLAUDE_CONFIG_DIR: mkCfg() } }).action, 'noop-nothing-wired');
 });
