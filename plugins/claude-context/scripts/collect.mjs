@@ -76,14 +76,14 @@ export async function runCli({ argv = process.argv, now = Date.now(), readInput 
   // Key by this session's id (from stdin) so concurrent same-account sessions each
   // write their own file instead of thrashing one shared snapshot.
   const snapPath = snapshotPath(snapshot.session_id, env);
-  writeSnapshot(snapPath, snapshot, { now, deps });
-  // If nothing is persisted at the path, the report will read "not set up" no matter how
-  // healthy this line looks (e.g. a read-only/full FS silently swallowed every write).
-  // Surface that as a fact — not advice — so the failure has a discovery path. A throttle
-  // no-op leaves the prior snapshot in place, so existsSync stays true and this is silent.
-  let persisted = false;
-  try { persisted = deps.existsSync(snapPath); } catch { persisted = false; }
-  const line = persisted ? compactLine(snapshot) : `${compactLine(snapshot)} · snapshot not saved`;
+  // Surface a genuine persistence FAILURE as a fact — not advice — so it has a discovery
+  // path: if writes silently fail (read-only/full FS), the report reads "not set up" no
+  // matter how healthy this line looks. writeSnapshot returns 'failed' only on a real
+  // error, so the marker fires even when a stale prior snapshot still sits on disk (which a
+  // plain existsSync check would misread as healthy) and stays quiet on a throttle
+  // 'skipped', where the prior snapshot is intentionally left in place.
+  const writeResult = writeSnapshot(snapPath, snapshot, { now, deps });
+  const line = writeResult === 'failed' ? `${compactLine(snapshot)} · snapshot not saved` : compactLine(snapshot);
   if (!silent) write(`${line}\n`);
 }
 

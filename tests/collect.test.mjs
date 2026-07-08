@@ -93,10 +93,12 @@ test('runCli statusline carries no marker when the snapshot persists', async () 
 });
 
 test('runCli flags a genuine write failure in the statusline (S1 discovery path)', async () => {
-  // A read-only/full FS: every write throws and nothing is ever persisted, so the report
-  // would read "not set up" forever. The statusline must say so instead of looking healthy.
+  // A read-only/full FS: every write throws and nothing durable is persisted. existsSync
+  // returns true here (a stale snapshot from a prior run sits on disk) — the masking case
+  // an existence check would misread as healthy — so the marker must be driven by the
+  // write result, not the file's presence.
   const failingDeps = {
-    existsSync: () => false,
+    existsSync: () => true,
     statSync: () => { throw new Error('nope'); },
     readFileSync: () => { throw new Error('nope'); },
     mkdirSync: () => {},

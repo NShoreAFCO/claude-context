@@ -44,7 +44,7 @@ function writeSnap(dir, sid, snap, now) { return writeSnapshot(path.join(dir, sn
 
 test('collector -> report seam: resolveReport reads a real buildSnapshot() output without dropping/renaming fields', () => {
   const dir = tmpDir('integration');
-  assert.equal(writeSnap(dir, 'sid-int', buildSnapshot(stdin, NOW), NOW), true);
+  assert.equal(writeSnap(dir, 'sid-int', buildSnapshot(stdin, NOW), NOW), 'written');
 
   const later = NOW + 1000;
   const resolution = resolveReport({ now: later, sessionId: 'sid-int', snapshotDir: dir, deps: fs, env: {} });

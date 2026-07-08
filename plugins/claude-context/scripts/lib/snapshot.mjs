@@ -23,6 +23,14 @@ function shouldWrite(snapshotPath, next, now, deps) {
   }
 }
 
+// Persist the snapshot atomically, returning a tri-state so the caller can tell a real
+// failure from a throttle no-op:
+//   'written' — the snapshot was (re)written to disk
+//   'skipped' — an up-to-date snapshot already exists (throttled / unchanged content)
+//   'failed'  — a write error was swallowed; nothing durable was persisted this call
+// The 'skipped' vs 'failed' split matters because a stale snapshot left on disk masks a
+// persistent write failure from a plain existsSync check (a read-only FS still shows the
+// old file), so the statusline marks 'failed' — but not 'skipped'.
 export function writeSnapshot(snapshotPath, snapshot, { now = Date.now(), deps = fs } = {}) {
   let tmp = null;
   try {
@@ -31,16 +39,16 @@ export function writeSnapshot(snapshotPath, snapshot, { now = Date.now(), deps =
     // mkdir's mode only applies to dirs it creates; tighten one an older version
     // (or a different umask) may have left world-traversable. Best-effort.
     try { deps.chmodSync(dir, 0o700); } catch { /* not ours to chmod; the 0600 file still protects content */ }
-    if (!shouldWrite(snapshotPath, snapshot, now, deps)) return false;
+    if (!shouldWrite(snapshotPath, snapshot, now, deps)) return 'skipped';
     tmp = path.join(dir, `.${path.basename(snapshotPath)}.${process.pid}.${now}.tmp`);
     deps.writeFileSync(tmp, `${JSON.stringify(snapshot, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
     deps.renameSync(tmp, snapshotPath);
     deps.chmodSync(snapshotPath, 0o600);
-    return true;
+    return 'written';
   } catch {
     // Don't leak a temp file per tick when rename/chmod persistently fails.
     if (tmp) { try { deps.unlinkSync(tmp); } catch { /* already gone */ } }
-    return false;
+    return 'failed';
   }
 }
 

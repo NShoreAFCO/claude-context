@@ -14,7 +14,7 @@ const snap = (extra = {}) => ({ updated_at: new Date(1000).toISOString(), contex
 
 test('writeSnapshot writes atomically with 0600 and creates dirs', () => {
   const p = tmpFile();
-  assert.equal(writeSnapshot(p, snap(), { now: 1000 }), true);
+  assert.equal(writeSnapshot(p, snap(), { now: 1000 }), 'written');
   assert.deepEqual(JSON.parse(fs.readFileSync(p, 'utf8')).context, { used_percentage: 46 });
   if (process.platform !== 'win32') {
     assert.equal(fs.statSync(p).mode & 0o777, 0o600);
@@ -64,7 +64,27 @@ test('writeSnapshot skips unchanged content within throttle window', () => {
   const p = tmpFile();
   writeSnapshot(p, snap(), { now: 1000 });
   // same content (ignoring updated_at), 10s later, still within 30s throttle
-  assert.equal(writeSnapshot(p, snap({ updated_at: new Date(11000).toISOString() }), { now: 11000 }), false);
+  assert.equal(writeSnapshot(p, snap({ updated_at: new Date(11000).toISOString() }), { now: 11000 }), 'skipped');
+});
+
+test('writeSnapshot reports "failed" (not "skipped") on a write error even when a stale snapshot is on disk', () => {
+  // The S1 masking case: a snapshot already exists, then the FS goes read-only. existsSync
+  // stays true — so a plain existence check would look healthy — but the write genuinely
+  // failed. The tri-state must say 'failed' so the statusline can surface it.
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-stale-fail-'));
+  const p = path.join(base, 'snapshot.json');
+  fs.writeFileSync(p, JSON.stringify(snap())); // a prior snapshot sits on disk
+  const deps = {
+    existsSync: () => true,           // stale file present...
+    statSync: () => ({ mtimeMs: 0 }), // ...but old enough to force a rewrite attempt
+    readFileSync: fs.readFileSync,
+    mkdirSync: () => {},
+    chmodSync: () => {},
+    writeFileSync: () => { throw new Error('EROFS: read-only file system'); },
+    renameSync: () => {},
+    unlinkSync: () => {},
+  };
+  assert.equal(writeSnapshot(p, snap({ updated_at: new Date(9_999_999).toISOString() }), { now: 9_999_999, deps }), 'failed');
 });
 
 test('writeSnapshot keeps the snapshot dir private (0700), tightening a pre-existing 0755 dir', () => {
@@ -142,7 +162,7 @@ test('writeSnapshot cleans up its temp file when the atomic rename fails', () =>
     renameSync: () => { throw new Error('rename boom'); },
     unlinkSync: (f) => { unlinked.push(f); fs.unlinkSync(f); },
   };
-  assert.equal(writeSnapshot(p, snap(), { now: 1000, deps }), false);
+  assert.equal(writeSnapshot(p, snap(), { now: 1000, deps }), 'failed');
   assert.equal(unlinked.length, 1); // the temp file was removed
   assert.deepEqual(fs.readdirSync(dir).filter((f) => f.includes('.tmp')), []); // none orphaned
 });
