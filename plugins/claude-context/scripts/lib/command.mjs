@@ -8,7 +8,9 @@ import { markerAssignment } from './marker.mjs';
 // with claude-context cached under two cache-ids it can launch an older version (I1). Git Bash
 // ships awk/grep/sort, and setup.md/teardown.md already run this exact form there.
 // ponytail: single resolver for both platforms; split again only if a target shell lacks awk.
-function globExpr() {
+// Exported so a test can assert setup.md/teardown.md embed this exact pipeline — the three
+// copies (this JS + two markdown) share no code path, so a drift guard is the only safety net.
+export function globExpr() {
   return [
     'plugin_dir=$(ls -d "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/claude-context/*/ 2>/dev/null',
     '| awk -F/ \'{ print $(NF-1) "\\t" $0 }\'',

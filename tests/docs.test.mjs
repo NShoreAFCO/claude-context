@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { globExpr } from '../plugins/claude-context/scripts/lib/command.mjs';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const read = (f) => readFileSync(path.join(root, f), 'utf8');
@@ -39,4 +40,19 @@ test('CHANGELOG has a 0.3.0 entry noting co-exist + teardown + the PowerShell re
   assert.match(c, /0\.3\.0/);
   assert.match(c, /co-?exist|teardown/i);
   assert.match(c, /PowerShell/);
+});
+
+test('setup.md and teardown.md embed the exact version-resolution pipeline globExpr() emits', () => {
+  // The pipeline is triplicated (command.mjs JS + these two markdown docs) with no shared
+  // code path; only the assigned var name differs. Compare the `$(...)` body so a future
+  // edit to the sort/glob in one place can't silently make /setup or /teardown resolve a
+  // different installed version than the statusline launches (the I1 fix hit all three).
+  const expr = globExpr();
+  const body = expr.slice(expr.indexOf('$(')); // drop the `plugin_dir=` / `PLUGIN_DIR=` prefix
+  for (const f of [
+    'plugins/claude-context/commands/setup.md',
+    'plugins/claude-context/commands/teardown.md',
+  ]) {
+    assert.ok(read(f).includes(body), `${f} must embed the current globExpr() pipeline verbatim`);
+  }
 });
