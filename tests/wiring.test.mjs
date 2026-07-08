@@ -4,8 +4,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { detect, wrap, teardown } from '../plugins/claude-context/scripts/wiring.mjs';
 import { detectMarker } from '../plugins/claude-context/scripts/lib/marker.mjs';
+
+const wiringPath = fileURLToPath(
+  new URL('../plugins/claude-context/scripts/wiring.mjs', import.meta.url),
+);
 
 function mkCfg() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'cc-wire-'));
@@ -199,4 +205,18 @@ test('teardown: unparseable settings.json → error, file left untouched', () =>
   assert.equal(r.action, 'error');
   assert.equal(r.reason, 'unparseable-settings');
   assert.equal(fs.readFileSync(path.join(cfg, 'settings.json'), 'utf8'), '{ not json ');
+});
+
+test('CLI: wrap with a missing --runtime prints a clean JSON error, not a stack trace', () => {
+  const cfg = mkCfg();
+  const r = spawnSync(process.execPath, [wiringPath, 'wrap'], {
+    env: { ...process.env, CLAUDE_CONFIG_DIR: cfg },
+    encoding: 'utf8',
+  });
+  assert.equal(r.status, 0, 'clean exit, not a crash');
+  assert.equal(JSON.parse(r.stdout).action, 'error');
+  assert.match(JSON.parse(r.stdout).reason, /runtime/i);
+  assert.equal(r.stderr.trim(), '', 'no stderr output at all');
+  assert.doesNotMatch(r.stderr, /\bat\s+.*wiring\.mjs/, 'no stack trace');
+  assert.equal(fs.existsSync(path.join(cfg, 'settings.json')), false, 'nothing written');
 });

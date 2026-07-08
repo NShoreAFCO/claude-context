@@ -232,13 +232,17 @@ const isMain = import.meta.url === pathToFileURL(process.argv[1] ?? '').href;
 if (isMain) {
   const sub = process.argv[2];
   let result;
-  if (sub === 'detect') result = detect();
-  else if (sub === 'wrap') {
-    result = wrap({
-      runtime: argValue(process.argv, '--runtime'),
-      platform: argValue(process.argv, '--platform') ?? 'posix',
-    });
-  } else if (sub === 'teardown') result = teardown();
-  else result = { action: 'error', reason: `unknown subcommand: ${sub ?? '(none)'}` };
+  try {
+    if (sub === 'detect') result = detect();
+    else if (sub === 'wrap') {
+      result = wrap({
+        runtime: argValue(process.argv, '--runtime'),
+        platform: argValue(process.argv, '--platform') ?? 'posix',
+      });
+    } else if (sub === 'teardown') result = teardown();
+    else result = { action: 'error', reason: `unknown subcommand: ${sub ?? '(none)'}` };
+  } catch (e) {
+    result = { action: 'error', reason: String(e && e.message ? e.message : e) };
+  }
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
