@@ -2,6 +2,7 @@
 // Adapted from claude-hud (MIT, © Jarrod Watts): src/external-usage.ts write/read robustness.
 import fs from 'node:fs';
 import path from 'node:path';
+import { ensureDir, writeFileAtomic } from './atomic-write.mjs';
 
 export const WRITE_THROTTLE_MS = 30_000;
 export const FRESHNESS_MS = 5 * 60_000;
@@ -32,35 +33,16 @@ function shouldWrite(snapshotPath, next, now, deps) {
 // persistent write failure from a plain existsSync check (a read-only FS still shows the
 // old file), so the statusline marks 'failed' — but not 'skipped'.
 export function writeSnapshot(snapshotPath, snapshot, { now = Date.now(), deps = fs } = {}) {
-  let tmp = null;
   try {
     const dir = path.dirname(snapshotPath);
-    deps.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    // mkdir's mode only applies to dirs it creates; tighten one an older version
-    // (or a different umask) may have left world-traversable. Best-effort.
-    try {
-      deps.chmodSync(dir, 0o700);
-    } catch {
-      /* not ours to chmod; the 0600 file still protects content */
-    }
+    ensureDir(dir, { deps, tighten: true });
     if (!shouldWrite(snapshotPath, snapshot, now, deps)) return 'skipped';
-    tmp = path.join(dir, `.${path.basename(snapshotPath)}.${process.pid}.${now}.tmp`);
-    deps.writeFileSync(tmp, `${JSON.stringify(snapshot, null, 2)}\n`, {
-      encoding: 'utf8',
-      mode: 0o600,
-    });
-    deps.renameSync(tmp, snapshotPath);
-    deps.chmodSync(snapshotPath, 0o600);
+    const tmp = path.join(dir, `.${path.basename(snapshotPath)}.${process.pid}.${now}.tmp`);
+    // writeFileAtomic unlinks its temp on any failure, so a persistent write error never
+    // leaks a temp per tick; we swallow the throw into the 'failed' leg of the tri-state.
+    writeFileAtomic(tmp, snapshotPath, `${JSON.stringify(snapshot, null, 2)}\n`, 0o600, { deps });
     return 'written';
   } catch {
-    // Don't leak a temp file per tick when rename/chmod persistently fails.
-    if (tmp) {
-      try {
-        deps.unlinkSync(tmp);
-      } catch {
-        /* already gone */
-      }
-    }
     return 'failed';
   }
 }

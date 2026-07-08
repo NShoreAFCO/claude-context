@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { settingsPath, sidecarPath, backupPath } from './lib/config-dir.mjs';
+import { ensureDir, writeFileAtomic } from './lib/atomic-write.mjs';
 import { detectMarker } from './lib/marker.mjs';
 import { buildStatuslineCommand } from './lib/command.mjs';
 import { previewCommand } from './lib/redact.mjs';
@@ -89,42 +90,6 @@ export function detect({ env = process.env, deps = fs } = {}) {
   };
 }
 
-function ensureDir(dir, deps, { tighten = false } = {}) {
-  deps.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  // mkdir's mode only applies to a dir it creates; tighten an existing loose one (older
-  // version / umask). Only for our own subdir — never the user's top-level config dir.
-  if (tighten) {
-    try {
-      deps.chmodSync(dir, 0o700);
-    } catch {
-      /* not ours to chmod; the 0600 file still protects content */
-    }
-  }
-}
-
-// Write `data` to `tmp` then atomically rename it into `dest`, unlinking `tmp` on ANY
-// failure — a partial write on a full/flaky FS (ENOSPC) as well as a failed rename — so a
-// stray per-attempt temp is never left behind. The mode is applied at write time; the
-// trailing chmod is best-effort — it cannot un-commit an already-renamed file.
-function writeFileAtomic(deps, tmp, dest, data, mode) {
-  try {
-    deps.writeFileSync(tmp, data, { mode });
-    deps.renameSync(tmp, dest);
-  } catch (e) {
-    try {
-      deps.unlinkSync(tmp);
-    } catch {
-      /* already gone / never created */
-    }
-    throw e;
-  }
-  try {
-    deps.chmodSync(dest, mode);
-  } catch {
-    /* best-effort umask-defeat; the temp already carried the mode */
-  }
-}
-
 // Write the single stable 0600 backup — exactly once per run, and only if there was a file
 // to protect. Backs up state.rawOriginal (the bytes captured when this run first read
 // settings.json), NOT a fresh read a concurrent /setup could have already overwritten.
@@ -139,7 +104,7 @@ function backupOnce(env, deps, state) {
     // so the next fresh install starts clean.
     if (!deps.existsSync(bp)) {
       const tmp = `${bp}.${process.pid}.${state.now}.tmp`;
-      writeFileAtomic(deps, tmp, bp, state.rawOriginal, 0o600);
+      writeFileAtomic(tmp, bp, state.rawOriginal, 0o600, { deps });
     }
   }
   state.backedUp = true;
@@ -148,7 +113,7 @@ function backupOnce(env, deps, state) {
 function writeSettingsAtomic(env, deps, obj) {
   const sp = settingsPath(env);
   const dir = path.dirname(sp);
-  ensureDir(dir, deps);
+  ensureDir(dir, { deps });
   // Preserve the file's existing mode; default a new settings.json to 0600 (it may hold secrets).
   let mode = 0o600;
   try {
@@ -157,15 +122,15 @@ function writeSettingsAtomic(env, deps, obj) {
     /* new file */
   }
   const tmp = path.join(dir, `.settings.json.${process.pid}.${Date.now()}.tmp`);
-  writeFileAtomic(deps, tmp, sp, `${JSON.stringify(obj, null, 2)}\n`, mode);
+  writeFileAtomic(tmp, sp, `${JSON.stringify(obj, null, 2)}\n`, mode, { deps });
 }
 
 function writeSidecarAtomic(env, deps, obj) {
   const scp = sidecarPath(env);
   const dir = path.dirname(scp);
-  ensureDir(dir, deps, { tighten: true });
+  ensureDir(dir, { deps, tighten: true });
   const tmp = path.join(dir, `.coexist.json.${process.pid}.${Date.now()}.tmp`);
-  writeFileAtomic(deps, tmp, scp, `${JSON.stringify(obj, null, 2)}\n`, 0o600);
+  writeFileAtomic(tmp, scp, `${JSON.stringify(obj, null, 2)}\n`, 0o600, { deps });
 }
 
 // KNOWN RACE (accepted, unguarded by design): wrap() and teardown() are lock-free,
