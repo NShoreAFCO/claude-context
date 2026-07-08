@@ -128,8 +128,8 @@ Only one thing can hold the statusline slot, so claude-context **co-exists** rat
 evict. `/claude-context:setup` first copies your existing statusline command into a private
 sidecar file, then puts itself in the slot as a wrapper that runs your original *and* taps
 its input for the snapshot. Both run; your **displayed line is unchanged**. Because the
-original was saved verbatim, `/claude-context:teardown` can put it back byte-for-byte and
-remove the sidecar. Setup **never** replaces or takes over a slot it doesn't own.
+original was saved verbatim, `/claude-context:teardown` restores that exact statusline and
+removes the sidecar. Setup **never** replaces or takes over a slot it doesn't own.
 
 Co-existence is available on **macOS, Linux, and Windows + Git Bash** in this alpha. On
 **native PowerShell/cmd** claude-context does not wire a statusline this release (a change
@@ -140,6 +140,22 @@ Bash** for live numbers, or wait for a later release.
 your original command is still stored, `/claude-context:teardown` refuses to clobber the new
 tool and instead shows you the preserved original. claude-context stays one level deep — it
 co-exists with exactly one prior statusline, not several.
+
+### Platform support and limits
+
+- **macOS / Linux** — fully supported.
+- **Windows + Git Bash** — supported, but everything runs through `bash`: the collector
+  command *and* any statusline it wraps are executed via `bash -c`, so Git Bash must be on
+  your `PATH`, and a foreign statusline is re-spawned under bash rather than your native shell.
+- **Native PowerShell / cmd** — setup makes no change this release (see above). Run Claude
+  Code from Git Bash for live numbers.
+- **File privacy is POSIX-only.** On macOS/Linux the snapshot, the co-existence sidecar, and
+  the one-time `settings.json` backup are written owner-only (`0600`). Windows filesystems
+  don't honor those mode bits, so on Windows those files are private *by location*, not by OS
+  permission — treat a shared Windows machine accordingly.
+- **`settings.json` gets normalized.** Setup and teardown rewrite `settings.json` as standard
+  2-space JSON. Your original **statusline** is restored verbatim; the surrounding file's own
+  indentation and key order are not preserved.
 
 ## Every number says how much to trust it
 
