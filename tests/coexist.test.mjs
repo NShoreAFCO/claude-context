@@ -298,3 +298,22 @@ test('degraded branch also triggers for a BLANK original.command (no spawn, code
   assert.equal(code, 0);
   assert.equal(out.trim(), 'Context 50%');
 });
+
+test('sidecar present but spawn throws synchronously → our line, not a blank statusline (S1)', async () => {
+  const cfg = mkCfg('bad-command'); // usable sidecar, so the hot path is reached
+  let out = '';
+  const code = await runCoexist({
+    now: 0,
+    readInput: async () => STDIN,
+    env: { CLAUDE_CONFIG_DIR: cfg },
+    spawn: () => {
+      // spawn() throws synchronously on an invalid command arg (e.g. a NUL/control byte).
+      throw new Error('ERR_INVALID_ARG_VALUE');
+    },
+    write: (s) => {
+      out += s;
+    },
+  });
+  assert.equal(code, 0);
+  assert.equal(out.trim(), 'Context 50%', 'degrades to our own line instead of blanking');
+});

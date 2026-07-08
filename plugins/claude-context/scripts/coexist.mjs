@@ -48,9 +48,9 @@ export async function runCoexist({
   }
   const sidecar = readSidecar(env, deps);
 
-  // Degraded half-state: wired to coexist but no usable sidecar. Show OUR line (not a
-  // blank statusline) as a visible signal, and still capture the snapshot.
-  if (!sidecar) {
+  // Show OUR line (never a blank statusline) and still capture the snapshot. Used both when
+  // there is no usable sidecar and when spawning the original throws (below).
+  const emitOwnLine = async () => {
     try {
       const { buildSnapshot, compactLine, writeSnapshot } = await loadSnapshotLib();
       const snapshot = buildSnapshot(parseStdinJson(input), now);
@@ -63,6 +63,11 @@ export async function runCoexist({
     } catch {
       write('\n');
     }
+  };
+
+  // Degraded half-state: wired to coexist but no usable sidecar.
+  if (!sidecar) {
+    await emitOwnLine();
     return 0;
   }
 
@@ -70,10 +75,18 @@ export async function runCoexist({
   // owns the display; inheriting also avoids a full-stderr-pipe deadlock in a chatty child).
   // Use `bash -c` (not `sh -c`) for consistency with command.mjs, which the plugin already
   // requires — a foreign statusline may rely on bashisms that a dash/busybox /bin/sh lacks.
-  const child = spawn('bash', ['-c', sidecar.original.command], {
-    stdio: ['pipe', 'inherit', 'inherit'],
-    env,
-  });
+  // spawn() throws SYNCHRONOUSLY on an invalid command arg (e.g. a NUL/control byte in the
+  // stored command); catch it so a bad sidecar degrades to our line, not a blank statusline.
+  let child;
+  try {
+    child = spawn('bash', ['-c', sidecar.original.command], {
+      stdio: ['pipe', 'inherit', 'inherit'],
+      env,
+    });
+  } catch {
+    await emitOwnLine();
+    return 0;
+  }
   child.stdin.on('error', () => {}); // a stray write to an already-closed child stdin is expected/harmless; swallow the async EPIPE so it never crashes the wrapper or overrides the original's exit code
 
   // Attach the exit listeners SYNCHRONOUSLY, before the snapshot's `await` — an exit that

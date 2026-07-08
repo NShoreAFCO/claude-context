@@ -419,7 +419,11 @@ test('teardown: coexist marker, sidecar lost, backup holds the original → rest
   const settings = readSettingsFile(cfg);
   assert.deepEqual(settings.statusLine, ORIGINAL, 'original statusLine recovered from the backup');
   assert.equal(settings.model, 'opus', 'sibling keys survive');
-  assert.equal(fs.existsSync(path.join(cfg, 'settings.json.claude-context.bak')), false, 'backup consumed');
+  assert.equal(
+    fs.existsSync(path.join(cfg, 'settings.json.claude-context.bak')),
+    false,
+    'backup consumed',
+  );
 });
 
 test('teardown: coexist marker, sidecar lost AND backup has no original → removes our entry, drops backup', () => {
