@@ -31,10 +31,11 @@ test('a foreign slot is a single proceed/cancel confirm', () => {
 });
 
 test('platform matrix is POSIX + Git Bash only; native PowerShell is reported unsupported, no settings change', () => {
+  const norm = setup.replace(/[*`]/g, '').replace(/\s+/g, ' ');
   assert.match(setup, /Git Bash/i);
   assert.match(setup, /PowerShell/);
   assert.match(setup, /unsupported/i);
-  assert.match(setup, /no (settings )?change|makes no change/i);
+  assert.match(norm, /Make no settings\.json change/i); // native-PowerShell branch specifically must make NO settings.json change (prior regex coincidentally matched the unrelated foreign-Cancel bullet)
 });
 
 test('references teardown and keeps the session-keyed snapshot verification glob', () => {
