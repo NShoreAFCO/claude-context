@@ -99,5 +99,12 @@ export async function runCli({
 // The Windows launcher (Task 11) imports the module and calls runCli() explicitly.
 const isMain = import.meta.url === pathToFileURL(process.argv[1] ?? '').href;
 if (isMain) {
-  await runCli();
+  // Fail safe, matching coexist.mjs: a synchronous throw (e.g. ERR_STREAM_DESTROYED writing
+  // to an already-closed statusline pipe) must not surface as an unhandled rejection — one
+  // blank tick, recovered next tick.
+  try {
+    await runCli();
+  } catch {
+    process.exit(0);
+  }
 }
