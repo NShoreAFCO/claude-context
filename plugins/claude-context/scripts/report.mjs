@@ -307,7 +307,7 @@ function buildHuman(r, now) {
   lines.push(rlLine('Session (5h)', r, r.rateLimits?.five_hour, now));
   lines.push(rlLine('Weekly (7d)', r, r.rateLimits?.seven_day, now));
   lines.push(
-    `Cost: ${r.cost != null ? `$${r.cost.toFixed(2)}` : 'unavailable'} · Compactions: ${r.compactions}`,
+    `Cost: ${r.cost != null ? `$${r.cost.toFixed(2)}` : 'unavailable'} · Compactions: ${r.compactions ?? 'unavailable'}`,
   );
   lines.push(sourceLine(r));
   return lines.join('\n');

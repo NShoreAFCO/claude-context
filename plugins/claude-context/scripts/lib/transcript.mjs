@@ -50,7 +50,10 @@ export function countCompactions(filePath, deps = fs) {
   try {
     entries = readJsonl(filePath, deps);
   } catch {
-    return 0;
+    // Unreadable transcript (e.g. a stale snapshot pointing at a since-rotated path): the
+    // count is UNKNOWN, not zero. Return null so the report never reports a fabricated 0 —
+    // the facts-only contract. (lastAssistantUsage already returns null on the same failure.)
+    return null;
   }
   let count = 0;
   for (const e of entries) {

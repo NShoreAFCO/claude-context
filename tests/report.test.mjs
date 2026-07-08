@@ -58,6 +58,14 @@ test('collector human block matches the contract', () => {
   assert.match(human, /^Source: collector · snapshot 4s old$/m);
 });
 
+test('compactions null (unreadable transcript) renders "unavailable", never a literal null', () => {
+  const res = { ...collectorRes, compactions: null };
+  const { human, json } = assembleReport(res, NOW);
+  assert.match(human, /^Cost: \$0\.42 · Compactions: unavailable$/m);
+  assert.doesNotMatch(human, /Compactions: null/);
+  assert.equal(json.compactions, null); // JSON passes the unknown through as null
+});
+
 test('collector-on but no subscription usage → unavailable_plan (non-committal copy)', () => {
   const res = { ...collectorRes, rateLimits: null, rateLimitsStatus: 'unavailable_plan' };
   const { human, json } = assembleReport(res, NOW);
