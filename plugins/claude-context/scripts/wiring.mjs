@@ -7,11 +7,15 @@ import { detectMarker } from './lib/marker.mjs';
 import { buildStatuslineCommand } from './lib/command.mjs';
 import { previewCommand } from './lib/redact.mjs';
 
-// Returns the parsed object, or undefined if the file is missing OR unparseable. Callers
-// distinguish the two with existsSync so an unreadable settings.json is never overwritten.
+// Returns the parsed object, or undefined if the file is missing, unparseable, OR not a
+// plain object. A bare-string/array/number JSON is not a usable settings.json and must not
+// be spread into (that corrupts it into indexed-char keys), so it degrades to "unparseable"
+// — callers distinguish missing from unparseable with existsSync and never overwrite the latter.
 function readJson(file, deps) {
   try {
-    return JSON.parse(deps.readFileSync(file, 'utf8'));
+    const parsed = JSON.parse(deps.readFileSync(file, 'utf8'));
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+    return parsed;
   } catch {
     return undefined;
   }
@@ -20,8 +24,11 @@ function currentCommand(settings) {
   const c = settings?.statusLine?.command;
   return typeof c === 'string' && c.trim() !== '' ? c : null;
 }
-function classify(command) {
-  if (command == null) return 'empty';
+// A `statusLine` present but without a usable string command is classified FOREIGN, not
+// empty: the user configured something there, so we co-exist (preserving it in a sidecar)
+// rather than silently overwriting it with our own collector.
+function classify(command, hasStatusLine) {
+  if (command == null) return hasStatusLine ? 'foreign' : 'empty';
   const marker = detectMarker(command);
   if (marker === 'collect') return 'ours-collect';
   if (marker === 'coexist') return 'ours-coexist';
@@ -44,11 +51,12 @@ export function detect({ env = process.env, deps = fs } = {}) {
       storedOriginalPreview: null,
     };
   }
-  const command = currentCommand(settings ?? {});
+  const s = settings ?? {};
+  const command = currentCommand(s);
   const sidecar = readSidecar(env, deps);
   const storedCommand = sidecar ? sidecar.original.command : null;
   return {
-    slot: classify(command),
+    slot: classify(command, s.statusLine != null),
     preview: command == null ? null : previewCommand(command),
     hasSidecar: !!sidecar,
     sidecarMatchesSlot: !!sidecar && command != null && storedCommand === command,
@@ -142,7 +150,7 @@ export function wrap({
     return { action: 'error', reason: 'unparseable-settings' };
   const base = settings ?? {};
   const command = currentCommand(base);
-  const slot = classify(command);
+  const slot = classify(command, base.statusLine != null);
   const state = { backedUp: false, now };
 
   const setVariant = (variant) => {

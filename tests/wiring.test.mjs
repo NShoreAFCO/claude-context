@@ -72,6 +72,18 @@ test('detect: unparseable settings.json → error slot (never overwrite what we 
   assert.equal(detect({ env: { CLAUDE_CONFIG_DIR: cfg } }).slot, 'error');
 });
 
+test('detect: a statusLine present but with no usable command classifies foreign, not empty', () => {
+  const cfg = mkCfg();
+  writeSettings(cfg, { statusLine: { type: 'command' } }); // no `command` string
+  assert.equal(detect({ env: { CLAUDE_CONFIG_DIR: cfg } }).slot, 'foreign');
+});
+
+test('detect: a bare-string settings.json → error slot (not a spreadable object)', () => {
+  const cfg = mkCfg();
+  fs.writeFileSync(path.join(cfg, 'settings.json'), '"just a string"');
+  assert.equal(detect({ env: { CLAUDE_CONFIG_DIR: cfg } }).slot, 'error');
+});
+
 const RUNTIME = '/usr/bin/node';
 function readSettingsFile(cfg) {
   return JSON.parse(fs.readFileSync(path.join(cfg, 'settings.json'), 'utf8'));
@@ -174,6 +186,29 @@ test('wrap: tightens an existing loose sidecar dir to 0700', () => {
   fs.chmodSync(scDir, 0o755); // simulate a loose dir left by an older version / umask
   wrap({ env: { CLAUDE_CONFIG_DIR: cfg }, now: 0, runtime: RUNTIME });
   assert.equal(fs.statSync(scDir).mode & 0o777, 0o700, 'sidecar dir re-tightened to 0700');
+});
+
+test('wrap: a statusLine with no usable command is co-existed (foreign), never seized', () => {
+  const cfg = mkCfg();
+  writeSettings(cfg, { statusLine: { type: 'command', padding: 3 } }); // present, no `command`
+  const r = wrap({ env: { CLAUDE_CONFIG_DIR: cfg }, now: 0, runtime: RUNTIME });
+  assert.equal(r.action, 'wired-coexist', 'foreign path — original preserved, slot not seized');
+  // The whole original object is stored verbatim so teardown restores it.
+  assert.deepEqual(readSidecarFile(cfg).original, { type: 'command', padding: 3 });
+  assert.equal(detectMarker(readSettingsFile(cfg).statusLine.command), 'coexist');
+});
+
+test('wrap: a bare-string settings.json is unparseable, never spread into an object', () => {
+  const cfg = mkCfg();
+  fs.writeFileSync(path.join(cfg, 'settings.json'), '"just a string"');
+  const r = wrap({ env: { CLAUDE_CONFIG_DIR: cfg }, now: 0, runtime: RUNTIME });
+  assert.equal(r.action, 'error');
+  assert.equal(r.reason, 'unparseable-settings');
+  assert.equal(
+    fs.readFileSync(path.join(cfg, 'settings.json'), 'utf8'),
+    '"just a string"',
+    'file left untouched — not corrupted into indexed-char keys',
+  );
 });
 
 test('wrap: idempotent for already-ours via marker, never nests', () => {
