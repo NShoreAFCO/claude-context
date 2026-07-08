@@ -40,16 +40,33 @@ test('bad inputs throw', () => {
   assert.throws(() => buildStatuslineCommand({ variant: 'collect', runtime: '' }));
 });
 
-test('the Git Bash command filters the plugin dir to semver versions, like the POSIX/docs form', () => {
-  const cmd = buildStatuslineCommand({
+test('Git Bash resolves the newest version by version field, same as POSIX (no cache-id sort bug)', () => {
+  const gb = buildStatuslineCommand({
     variant: 'collect',
     runtime: '/usr/bin/node',
     platform: 'gitbash',
   });
-  assert.match(cmd, /grep -E/, 'gitbash branch must drop non-semver cache dirs, not just sort -V');
-  assert.ok(
-    cmd.includes('/claude-context/[0-9]+\\.[0-9]+\\.[0-9]+/'),
-    'filters on the semver version segment',
+  const px = buildStatuslineCommand({
+    variant: 'collect',
+    runtime: '/usr/bin/node',
+    platform: 'posix',
+  });
+  // A whole-line `sort -V` orders by the cache-id dir that precedes the version, so it could
+  // launch an older version. Both platforms must use the awk version-field sort instead (I1).
+  assert.equal(gb, px, 'gitbash must not diverge to a whole-line sort -V');
+  assert.match(gb, /awk -F\//);
+  assert.doesNotMatch(gb, /sort -V/);
+});
+
+test('a bun runtime gets --env-file /dev/null so it does not auto-load the project .env (I2)', () => {
+  for (const runtime of ['bun', '/opt/homebrew/bin/bun']) {
+    const cmd = buildStatuslineCommand({ variant: 'coexist', runtime });
+    assert.match(cmd, /--env-file \/dev\/null/, `bun must neutralize .env: ${runtime}`);
+  }
+  // node must NOT get the flag.
+  assert.doesNotMatch(
+    buildStatuslineCommand({ variant: 'coexist', runtime: '/usr/bin/node' }),
+    /--env-file/,
   );
 });
 
