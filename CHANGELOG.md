@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.3.1
+
+Bug-fix and hardening release over 0.3.0. No new features; the co-existing statusline and
+the report's shape are unchanged.
+
+- **`compactions` reports `null`, never a fabricated `0`,** when the transcript can't be
+  read or its path is absent — so a rule keyed on the compaction count never acts on an
+  invented value.
+- **Session identity:** the report falls through to the `CLAUDE_CODE_SESSION_ID` env var
+  when the passed `--session-id` is empty or unexpanded, instead of degrading to another
+  session's newest snapshot.
+- **Bun support:** setup, teardown, and the statusline resolve `bun` or `node` rather than
+  hardcoding `node`; under Bun the collector runs with `--env-file /dev/null` so it can't
+  auto-load the project's `.env`.
+- **Secret redaction:** the setup preview masks many more credential shapes (AWS/Google/
+  Slack keys, JWTs, basic-auth URLs, positional and abbreviated tokens), so a wrapped
+  statusline command can't leak secrets into the setup transcript.
+- **Setup/teardown robustness:** never clobber the one-time settings backup on re-setup;
+  never strand a temp file on a failed write; recover the original statusline from the
+  backup when the sidecar is lost; restore a command-less original verbatim; refuse to
+  seize a slot whose marker isn't ours.
+- **Command safety:** the runtime path is single-quoted in the persisted statusline command,
+  so a path containing shell metacharacters can't execute.
+- **Git Bash:** the plugin-dir resolver filters to semver directories and sorts by version
+  field (matching POSIX), always launching the newest installed version rather than an older
+  cached one.
+- **Fail-safe statusline:** a stdin stream error or a failed spawn of the wrapped original
+  degrades to our own line instead of blanking the statusline.
+- **Docs:** the README flags alpha status up front, explains why the plugin needs a
+  statusline, and documents the Windows limitations (POSIX-only file modes, the `bash`
+  dependency, `settings.json` normalization).
+
 ## 0.3.0
 
 - **Co-existing statusline.** `/claude-context:setup` now wraps an existing (foreign)
