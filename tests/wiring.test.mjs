@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { detect } from '../plugins/claude-context/scripts/wiring.mjs';
+import { detect, wrap } from '../plugins/claude-context/scripts/wiring.mjs';
+import { detectMarker } from '../plugins/claude-context/scripts/lib/marker.mjs';
 
 function mkCfg() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'cc-wire-'));
@@ -63,4 +64,82 @@ test('detect: unparseable settings.json → error slot (never overwrite what we 
   const cfg = mkCfg();
   fs.writeFileSync(path.join(cfg, 'settings.json'), '{ this is not json ');
   assert.equal(detect({ env: { CLAUDE_CONFIG_DIR: cfg } }).slot, 'error');
+});
+
+const RUNTIME = '/usr/bin/node';
+function readSettingsFile(cfg) {
+  return JSON.parse(fs.readFileSync(path.join(cfg, 'settings.json'), 'utf8'));
+}
+function readSidecarFile(cfg) {
+  return JSON.parse(fs.readFileSync(path.join(cfg, 'claude-context', 'coexist.json'), 'utf8'));
+}
+
+test('wrap: empty slot → wires collect, marked, no sidecar', () => {
+  const cfg = mkCfg();
+  const r = wrap({ env: { CLAUDE_CONFIG_DIR: cfg }, now: 0, runtime: RUNTIME });
+  assert.equal(r.action, 'wired-collect');
+  assert.equal(detectMarker(readSettingsFile(cfg).statusLine.command), 'collect');
+  assert.equal(fs.existsSync(path.join(cfg, 'claude-context', 'coexist.json')), false);
+});
+
+test('wrap: foreign → stores the WHOLE original statusLine object + wires coexist, preserving other keys', () => {
+  const cfg = mkCfg();
+  writeSettings(cfg, {
+    model: 'opus',
+    statusLine: { type: 'command', command: FOREIGN, padding: 1 },
+  });
+  const r = wrap({ env: { CLAUDE_CONFIG_DIR: cfg }, now: 0, runtime: RUNTIME });
+  assert.equal(r.action, 'wired-coexist');
+  const settings = readSettingsFile(cfg);
+  assert.equal(detectMarker(settings.statusLine.command), 'coexist');
+  assert.equal(settings.model, 'opus', 'other settings keys preserved');
+  assert.deepEqual(readSidecarFile(cfg).original, {
+    type: 'command',
+    command: FOREIGN,
+    padding: 1,
+  });
+});
+
+test('wrap: writes exactly ONE full-file backup, mode 0600, before mutating', () => {
+  const cfg = mkCfg();
+  writeSettings(cfg, { statusLine: { type: 'command', command: FOREIGN } });
+  wrap({ env: { CLAUDE_CONFIG_DIR: cfg }, now: 0, runtime: RUNTIME });
+  const bak = path.join(cfg, 'settings.json.claude-context.bak');
+  assert.ok(fs.existsSync(bak), 'backup exists');
+  assert.match(
+    JSON.parse(fs.readFileSync(bak, 'utf8')).statusLine.command,
+    /statusline\.js|claude-hud|bun run/,
+  );
+  if (process.platform !== 'win32') assert.equal(fs.statSync(bak).mode & 0o777, 0o600);
+});
+
+test('wrap: idempotent for already-ours via marker, never nests', () => {
+  const cfg = mkCfg();
+  writeSettings(cfg, { statusLine: { type: 'command', command: COEXIST } });
+  const r = wrap({ env: { CLAUDE_CONFIG_DIR: cfg }, now: 0, runtime: RUNTIME });
+  assert.equal(r.action, 'refreshed-coexist');
+  const cmd = readSettingsFile(cfg).statusLine.command;
+  assert.equal(detectMarker(cmd), 'coexist');
+  assert.equal((cmd.match(/CLAUDE_CONTEXT_WRAPPER=coexist/g) || []).length, 1, 'no nested re-wrap');
+});
+
+test('wrap: orphaned sidecar — slot matches stored original → resume', () => {
+  const cfg = mkCfg();
+  writeSettings(cfg, { statusLine: { type: 'command', command: FOREIGN } });
+  writeSidecar(cfg, { type: 'command', command: FOREIGN });
+  const r = wrap({ env: { CLAUDE_CONFIG_DIR: cfg }, now: 0, runtime: RUNTIME });
+  assert.equal(r.action, 'resumed-coexist');
+  assert.equal(detectMarker(readSettingsFile(cfg).statusLine.command), 'coexist');
+});
+
+test('wrap: orphaned sidecar — slot DIFFERS → conflict, no overwrite of the stored pointer', () => {
+  const cfg = mkCfg();
+  writeSettings(cfg, { statusLine: { type: 'command', command: 'some-third-tool' } });
+  writeSidecar(cfg, { type: 'command', command: FOREIGN });
+  const r = wrap({ env: { CLAUDE_CONFIG_DIR: cfg }, now: 0, runtime: RUNTIME });
+  assert.equal(r.action, 'conflict');
+  assert.match(r.storedOriginalPreview, /claude-hud|statusline\.js|bun run/);
+  // The slot and the sidecar are both untouched.
+  assert.equal(readSettingsFile(cfg).statusLine.command, 'some-third-tool');
+  assert.equal(readSidecarFile(cfg).original.command, FOREIGN);
 });
