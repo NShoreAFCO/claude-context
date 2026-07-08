@@ -52,15 +52,34 @@ tool that hard-coded its own thresholds would just fight the ones you wrote.
 
 ## Install
 
+Add marketplace:
+
 ```
 /plugin marketplace add Ovid/claude-context
+```
+
+Install (must be a separate prompt):
+
+```
 /plugin install claude-context@claude-context
+```
+
+Set up:
+
+```
+/claude-context:setup
 ```
 
 Then any agent — or you — can ask:
 
 ```
 /claude-context:claude-context
+```
+
+Or:
+
+```
+/claude-context
 ```
 
 Reporting requires the one-time `/claude-context:setup` (see below). Before that's
