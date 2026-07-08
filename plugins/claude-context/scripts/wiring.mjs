@@ -55,9 +55,13 @@ function classify(command, hasStatusLine) {
   if (marker === 'coexist') return 'ours-coexist';
   return 'foreign';
 }
+// A sidecar is restorable when it holds ANY stored `original` — teardown must round-trip
+// exactly what wrap() stored, and wrap() deliberately stores a command-less foreign
+// statusLine verbatim (an object with no string `command`). The stricter "runnable command"
+// predicate lives only in coexist.mjs, where a command is needed to spawn the original.
 function readSidecar(env, deps) {
   const s = readJson(sidecarPath(env), deps);
-  return s && s.original && typeof s.original.command === 'string' ? s : null;
+  return s && s.original != null ? s : null;
 }
 
 export function detect({ env = process.env, deps = fs } = {}) {
@@ -255,11 +259,14 @@ export function teardown({ env = process.env, deps = fs } = {}) {
       removeIfPresent(backupPath(env), deps);
       return { action: 'restored-original' };
     }
-    // Our wrapper is wired but the sidecar is gone — nothing to restore. Back to empty.
+    // Our wrapper is wired but there's no restorable sidecar — nothing to restore. Back to
+    // empty, and clear any present-but-unusable sidecar file so it is never orphaned
+    // (matching the removed-collect branch).
     backupOnce(env, deps, state);
     const next = { ...base };
     delete next.statusLine;
     writeSettingsAtomic(env, deps, next);
+    removeIfPresent(sidecarPath(env), deps);
     removeIfPresent(backupPath(env), deps);
     return { action: 'coexist-no-sidecar-removed' };
   }

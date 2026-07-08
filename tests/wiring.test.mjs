@@ -285,6 +285,46 @@ test('teardown: coexist + sidecar → restores the original verbatim, removes si
   assert.equal(fs.existsSync(path.join(cfg, 'settings.json.claude-context.bak')), false);
 });
 
+test('teardown: restores a command-less co-existed original verbatim (round-trips wrap), clears sidecar', () => {
+  // wrap() stores a foreign statusLine that has no usable `command` verbatim (see the
+  // "no usable command is co-existed" wrap test). teardown must restore that same object,
+  // never `delete` it, and must not orphan the sidecar.
+  const cfg = mkCfg();
+  writeSettings(cfg, { model: 'opus', statusLine: { type: 'command', padding: 3 } });
+  const w = wrap({ env: { CLAUDE_CONFIG_DIR: cfg }, now: 0, runtime: RUNTIME });
+  assert.equal(w.action, 'wired-coexist');
+  const r = teardown({ env: { CLAUDE_CONFIG_DIR: cfg } });
+  assert.equal(r.action, 'restored-original');
+  const settings = readSettingsFile(cfg);
+  assert.deepEqual(settings.statusLine, { type: 'command', padding: 3 }, 'original restored verbatim');
+  assert.equal(settings.model, 'opus', 'sibling keys preserved');
+  assert.equal(
+    fs.existsSync(path.join(cfg, 'claude-context', 'coexist.json')),
+    false,
+    'sidecar removed, not orphaned',
+  );
+});
+
+test('teardown: coexist marker but a truly unusable sidecar → removes statusLine AND clears the orphan sidecar', () => {
+  // A sidecar file present but with no restorable `original` at all: nothing to restore, so
+  // fall back to removing our wrapper — and clean up the sidecar so it is never orphaned.
+  const cfg = mkCfg();
+  writeSettings(cfg, { statusLine: { type: 'command', command: COEXIST } });
+  fs.mkdirSync(path.join(cfg, 'claude-context'), { recursive: true });
+  fs.writeFileSync(
+    path.join(cfg, 'claude-context', 'coexist.json'),
+    JSON.stringify({ wrapped_at: new Date(0).toISOString() }), // no `original`
+  );
+  const r = teardown({ env: { CLAUDE_CONFIG_DIR: cfg } });
+  assert.equal(r.action, 'coexist-no-sidecar-removed');
+  assert.equal('statusLine' in readSettingsFile(cfg), false);
+  assert.equal(
+    fs.existsSync(path.join(cfg, 'claude-context', 'coexist.json')),
+    false,
+    'orphan sidecar cleared',
+  );
+});
+
 test('teardown: bare collect marker (empty-slot install) → removes our statusLine entry', () => {
   const cfg = mkCfg();
   writeSettings(cfg, { statusLine: { type: 'command', command: COLLECT } });
