@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.2
+
+Fork release (NShoreAFCO/claude-context). Two fixes; existing fields and states are
+unchanged when no auto-compact window is configured.
+
+- **Auto-compact window:** the report reads the configured auto-compact window
+  (`CLAUDE_CODE_AUTO_COMPACT_WINDOW`, or `autoCompactWindow` per model under
+  `modelSettings` or at the top level of local/project/user settings) and adds
+  `auto_compact_window`, its source, and usage and headroom against it, capped at the model
+  window. Before, usage was measured only against the model window (e.g. 1M) while Claude
+  Code compacted at the configured 400k. Only those keys are read from settings.
+- **Setup on Windows:** setup asks the Git Bash that Claude Code runs (its Bash tool, or
+  `bin\bash.exe` next to `git` / `CLAUDE_CODE_GIT_BASH_PATH`) for `$OSTYPE`, instead of
+  reading `$OSTYPE` in the session's own shell. A PowerShell session on a machine with Git
+  Bash installed is no longer refused. WSL's `bash.exe` (`linux-gnu`) still takes the native
+  stop.
+
 ## 0.3.1
 
 Bug-fix and hardening release over 0.3.0. No new features; the co-existing statusline and
