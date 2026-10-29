@@ -2,19 +2,19 @@
 
 **Updated:** 2026-10-29, session 631cd151-a843-473a-8a10-ed27e201ea26 (previous: 5323ca0a)
 
-## Latest: G2 prepared, waiting on N. Shore
+## Latest: posted upstream (G2 go by N. Shore in session 631cd151)
 
-0.3.3 live check (partly): in session 631cd151 `/claude-context:claude-context` loaded from
-`skills/claude-context/` and printed the report (`auto_compact_window 400000`, source user,
-session_id match). Statusline line not seen by the agent; N. Shore to confirm it shows tokens
-and countdowns.
-
-G2 prep: branch `upstream/compact-window-gitbash` built in worktree `Devel/cc-upstream`
-(local only, NOT pushed) = upstream/main + b5100f4, 2b5e3a6, 142e8fd, 2b172b2, b6b6bd4
-(CHANGELOG hunk dropped). Statusline feature 3dd38ea left out. 182/182 tests, eslint clean.
-Drafts (3 issues + PR): `docs/superpowers/upstream-drafts.md`.
-After G2 go: push branch to origin, open the three issues on Ovid/claude-context, then the PR
-from NShoreAFCO:upstream/compact-window-gitbash with the issue numbers filled in.
+- Issues Ovid/claude-context #1 (autoCompactWindow), #2 (Windows setup), #3 (skill never
+  loaded; notes bare `/claude-context` still autocompletes to `:setup`).
+- PR #4 fix: `NShoreAFCO:upstream/compact-window-gitbash` (5 commits, 182/182). PR #5 feature:
+  `NShoreAFCO:upstream/statusline-tokens`, stacked on #4 (189/189). Both MERGEABLE.
+- Worktree `Devel/cc-upstream` holds these branches; address review comments there.
+- Statusline confirmed live by N. Shore (WP statusline-tokens done). Bare `/claude-context`
+  can't be a plugin command; personal shortcut `~/.claude/skills/claude-context/SKILL.md`
+  runs the newest installed report.
+- Tracker: G2 must be recorded by N. Shore in the dashboard (agent refused); WP `upstream`
+  is gate-locked until then (target: 80%, waiting on upstream review). report-skill 90%,
+  release-033 awaiting verification.
 
 ## Latest: 0.3.3 on fork main (supersedes "State" below)
 

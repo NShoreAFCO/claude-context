@@ -1,5 +1,7 @@
 # Upstream drafts (G2 review) — Ovid/claude-context
 
+**Posted 2026-10-29:** issues #1–#3, PR #4 (fix), PR #5 (statusline feature, stacked). The live text on GitHub is authoritative.
+
 Branch: `upstream/compact-window-gitbash` (local worktree `Devel/cc-upstream`, not pushed),
 5 commits on `upstream/main` 2026-10-29: fb7773c, 0e26a69, 2d1aa91, 66a8304, 67dbbc4.
 182/182 tests, eslint clean. No version bump, no CHANGELOG entry, no plan docs.
