@@ -5,6 +5,7 @@ import {
   percentage,
   headroom,
   effectiveWindow,
+  formatTokens,
 } from '../plugins/claude-context/scripts/lib/token-math.mjs';
 
 test('usedTokens sums input + cache read + cache creation', () => {
@@ -41,4 +42,13 @@ test('effectiveWindow is the smaller positive of model window and auto-compact w
   assert.equal(effectiveWindow(1000000, null), 1000000);
   assert.equal(effectiveWindow(0, 400000), 400000);
   assert.equal(effectiveWindow(0, null), null);
+});
+
+test('formatTokens', () => {
+  assert.equal(formatTokens(0), '0');
+  assert.equal(formatTokens(999), '999');
+  assert.equal(formatTokens(83709), '84k');
+  assert.equal(formatTokens(999600), '1M');
+  assert.equal(formatTokens(1000000), '1M');
+  assert.equal(formatTokens(1500000), '1.5M');
 });

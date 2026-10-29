@@ -57,4 +57,3 @@ Step 4), then the **G2 gate** (Task 5).
 - `effectiveWindow(0, acw)` returns `acw` (uncapped) when the model window is unknown. The
   human line hides it, but the JSON shows it.
 - Settings are read on every tick before the write throttle (3 small sync reads).
-- `compactLine` shows 1M as `1000k`.

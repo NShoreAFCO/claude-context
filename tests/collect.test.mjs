@@ -2,7 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
-import { percentage } from '../plugins/claude-context/scripts/lib/token-math.mjs';
 import { buildSnapshot, compactLine, runCli } from '../plugins/claude-context/scripts/collect.mjs';
 
 const stdin = {
@@ -63,19 +62,42 @@ test('buildSnapshot treats native used_percentage=0 as unpopulated and computes 
   assert.equal(s.context.used_percentage, 46); // 92000 / 200000, not the literal 0
 });
 
-test('compactLine shows context and any rate limits', () => {
-  assert.equal(compactLine(buildSnapshot(stdin, 0)), 'Context 46% · 5h 25% · 7d 61%');
+// 1h 49m before the fixture's five_hour reset; seven_day is then 3d 4h away.
+const NOW = 1751898600000 - 109 * 60_000;
+
+test('compactLine shows tokens, percentage and reset countdowns', () => {
   assert.equal(
-    compactLine(
-      buildSnapshot(
-        {
-          context_window: { context_window_size: 200000, current_usage: { input_tokens: 100000 } },
-        },
-        0,
-      ),
-    ),
-    'Context 50%',
+    compactLine(buildSnapshot(stdin, 0), NOW),
+    'Context 92k/200k 46% · 5h 25% 1h 49m · 7d 61% 3d 4h',
   );
+});
+
+test('compactLine on a fresh session', () => {
+  assert.equal(
+    compactLine(buildSnapshot({ context_window: { context_window_size: 1000000 } }, 0), 0),
+    'Context 0/1M 0%',
+  );
+});
+
+test('compactLine without a window size', () => {
+  const s = buildSnapshot({ context_window: { current_usage: { input_tokens: 83709 } } }, 0);
+  assert.equal(compactLine(s, 0), 'Context 84k');
+});
+
+test('compactLine countdown never goes negative', () => {
+  const s = buildSnapshot(stdin, 0);
+  assert.match(compactLine(s, 1751898600000 + 10 * 60_000), / · 5h 25% <1m · /);
+});
+
+test('compactLine omits the countdown when resets_at is null', () => {
+  const s = buildSnapshot(
+    {
+      ...stdin,
+      rate_limits: { five_hour: { used_percentage: 25 }, seven_day: stdin.rate_limits.seven_day },
+    },
+    0,
+  );
+  assert.match(compactLine(s, NOW), / · 5h 25% · 7d 61% 3d 4h$/);
 });
 
 import { readFileSync } from 'node:fs';
@@ -136,7 +158,7 @@ test('runCli statusline carries no marker when the snapshot persists', async () 
       out += s;
     },
   });
-  assert.equal(out.trim(), 'Context 50%');
+  assert.equal(out.trim(), 'Context 100k/200k 50%');
   assert.doesNotMatch(out, /snapshot not saved/);
 });
 
@@ -176,7 +198,7 @@ test('runCli flags a genuine write failure in the statusline (S1 discovery path)
       out += s;
     },
   });
-  assert.match(out, /^Context 50% · snapshot not saved$/m);
+  assert.match(out, /^Context 100k\/200k 50% · snapshot not saved$/m);
 });
 
 const stdin1m = {
@@ -195,11 +217,21 @@ test('buildSnapshot stores the auto-compact window next to the model window', ()
   assert.equal(plain.context.auto_compact_window_source, null);
 });
 
-test('compactLine adds usage against the auto-compact window when one is configured', () => {
+test('compactLine adds tokens against the auto-compact window', () => {
   const s = buildSnapshot(stdin1m, 0, { tokens: 400000, source: 'user' });
-  const pct = percentage(s.context.used_tokens, 400000);
-  assert.equal(compactLine(s), `Context 9% · ${pct}% of 400k · 5h 25% · 7d 61%`);
-  assert.equal(compactLine(buildSnapshot(stdin1m, 0)), 'Context 9% · 5h 25% · 7d 61%');
+  assert.equal(
+    compactLine(s, NOW),
+    'Context 92k/1M 9% · 92k/400k 23% · 5h 25% 1h 49m · 7d 61% 3d 4h',
+  );
+  assert.equal(
+    compactLine(buildSnapshot(stdin1m, 0), NOW),
+    'Context 92k/1M 9% · 5h 25% 1h 49m · 7d 61% 3d 4h',
+  );
+});
+
+test('compactLine caps the auto-compact window at the model window', () => {
+  const s = buildSnapshot(stdin, 0, { tokens: 400000, source: 'user' });
+  assert.match(compactLine(s, NOW), /^Context 92k\/200k 46% · 92k\/200k 46% · /);
 });
 
 test('runCli reads the auto-compact window from the config dir settings', async () => {
