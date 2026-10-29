@@ -1,8 +1,15 @@
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { usedTokens, percentage, effectiveWindow, num, numOrNull } from './lib/token-math.mjs';
+import {
+  usedTokens,
+  percentage,
+  effectiveWindow,
+  formatTokens,
+  num,
+  numOrNull,
+} from './lib/token-math.mjs';
 import { readAutoCompactWindow } from './lib/auto-compact.mjs';
-import { epochToMs } from './lib/time.mjs';
+import { epochToMs, formatDuration } from './lib/time.mjs';
 import { writeSnapshot } from './lib/snapshot.mjs';
 import { snapshotPath } from './lib/config-dir.mjs';
 import { readStdin, parseStdinJson } from './lib/stdin.mjs';
@@ -62,17 +69,39 @@ export function buildSnapshot(stdin, now, autoCompact = { tokens: null, source: 
   };
 }
 
-export function compactLine(snapshot) {
-  const pct = snapshot.context.used_percentage;
-  const parts = [`Context ${pct == null ? '—' : pct}%`];
+// Countdown to a rate-limit reset, rounded to the minute like the report's resetsInSeconds
+// and floored at 0. Null when resets_at is missing or unparseable.
+function countdown(resetsAt, now) {
+  const ms = resetsAt ? Date.parse(resetsAt) : NaN;
+  if (!Number.isFinite(ms)) return null;
+  return formatDuration(Math.max(0, Math.round((ms - now) / 60_000) * 60));
+}
+
+function rateLimitPart(label, w, now) {
+  if (w?.used_percentage == null) return null;
+  const left = countdown(w.resets_at, now);
+  return `${label} ${w.used_percentage}%${left ? ` ${left}` : ''}`;
+}
+
+export function compactLine(snapshot, now = Date.now()) {
+  const { used_tokens: used, window_size: size, used_percentage: pct } = snapshot.context;
+  const parts = [
+    size > 0
+      ? `Context ${formatTokens(used)}/${formatTokens(size)} ${pct == null ? '—' : pct}%`
+      : `Context ${formatTokens(used)}`,
+  ];
   const acw = snapshot.context.auto_compact_window;
   if (acw != null) {
-    const eff = effectiveWindow(snapshot.context.window_size, acw);
-    parts.push(`${percentage(snapshot.context.used_tokens, eff)}% of ${Math.round(eff / 1000)}k`);
+    const eff = effectiveWindow(size, acw);
+    parts.push(`${formatTokens(used)}/${formatTokens(eff)} ${percentage(used, eff)}%`);
   }
   const rl = snapshot.rate_limits;
-  if (rl?.five_hour?.used_percentage != null) parts.push(`5h ${rl.five_hour.used_percentage}%`);
-  if (rl?.seven_day?.used_percentage != null) parts.push(`7d ${rl.seven_day.used_percentage}%`);
+  for (const p of [
+    rateLimitPart('5h', rl?.five_hour, now),
+    rateLimitPart('7d', rl?.seven_day, now),
+  ]) {
+    if (p) parts.push(p);
+  }
   return parts.join(' · ');
 }
 
@@ -100,8 +129,8 @@ export async function runCli({
   const writeResult = writeSnapshot(snapPath, snapshot, { now, deps });
   const line =
     writeResult === 'failed'
-      ? `${compactLine(snapshot)} · snapshot not saved`
-      : compactLine(snapshot);
+      ? `${compactLine(snapshot, now)} · snapshot not saved`
+      : compactLine(snapshot, now);
   if (!silent) write(`${line}\n`);
 }
 

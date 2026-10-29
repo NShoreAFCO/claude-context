@@ -157,7 +157,29 @@ test('missing/corrupt sidecar → degrades to our own compact line', async () =>
     },
   });
   assert.equal(code, 0);
-  assert.equal(out.trim(), 'Context 50%');
+  assert.equal(out.trim(), 'Context 100k/200k 50%');
+});
+
+test('fallback line passes now to compactLine', async () => {
+  const cfg = mkCfg(); // no sidecar → our own line
+  let out = '';
+  await runCoexist({
+    now: 123,
+    readInput: async () => STDIN,
+    env: { CLAUDE_CONFIG_DIR: cfg },
+    spawn: () => {
+      throw new Error('must not spawn in degraded mode');
+    },
+    loadSnapshotLib: async () => ({
+      buildSnapshot: () => ({ session_id: 'sid-cox' }),
+      compactLine: (snap, n) => String(n),
+      writeSnapshot: () => {},
+    }),
+    write: (s) => {
+      out += s;
+    },
+  });
+  assert.equal(out, '123\n');
 });
 
 test('exit code is captured even when the child closes DURING the snapshot await', async () => {
@@ -278,7 +300,7 @@ test('degraded branch also triggers for a MALFORMED-JSON sidecar (no spawn, code
     },
   });
   assert.equal(code, 0);
-  assert.equal(out.trim(), 'Context 50%');
+  assert.equal(out.trim(), 'Context 100k/200k 50%');
 });
 
 test('degraded branch also triggers for a BLANK original.command (no spawn, code 0, our line)', async () => {
@@ -296,7 +318,7 @@ test('degraded branch also triggers for a BLANK original.command (no spawn, code
     },
   });
   assert.equal(code, 0);
-  assert.equal(out.trim(), 'Context 50%');
+  assert.equal(out.trim(), 'Context 100k/200k 50%');
 });
 
 test('sidecar present but spawn throws synchronously → our line, not a blank statusline (S1)', async () => {
@@ -315,7 +337,7 @@ test('sidecar present but spawn throws synchronously → our line, not a blank s
     },
   });
   assert.equal(code, 0);
-  assert.equal(out.trim(), 'Context 50%', 'degrades to our own line instead of blanking');
+  assert.equal(out.trim(), 'Context 100k/200k 50%', 'degrades to our own line instead of blanking');
 });
 
 test('tap run writes the auto-compact window into the snapshot', async () => {

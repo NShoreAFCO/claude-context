@@ -186,6 +186,14 @@ to sit in the statusline slot, record each update to a private per-session snaps
 and read that snapshot back when the report runs. That snapshot is the entire reason
 `/claude-context:setup` exists — the collector is not a display, it's a tap.
 
+When the collector owns the slot on its own, it also prints one line: tokens used against
+the model window, against the auto-compact window when one is configured, and each
+subscription window's usage with the time until it resets:
+
+```
+Context 84k/1M 8% · 84k/400k 21% · 5h 50% 1h 49m · 7d 18% 5d 18h
+```
+
 ### Already have a statusline?
 
 Only one thing can hold the statusline slot, so claude-context **co-exists** rather than
