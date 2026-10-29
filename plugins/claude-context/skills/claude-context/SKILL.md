@@ -35,6 +35,14 @@ Code; if your build doesn't expose it, the report falls back to the
 `session_selection` below). It prints a human-readable block and a fenced `json`
 block, and always succeeds even with no collector running.
 
+### First use
+
+If the JSON block has `"setup_required": true`, the collector has never run. Read
+`${CLAUDE_PLUGIN_ROOT}/commands/setup.md` and follow it exactly, including its
+proceed/cancel confirm when a foreign statusline owns the slot and its stop on native
+PowerShell. If setup wires the collector, run the report command above once more and
+relay that output. If setup is cancelled or stops, relay the first report as-is.
+
 ## Field reference
 
 - **context.used_percentage** — percent of the context window in use (0–100).

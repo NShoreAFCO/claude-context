@@ -8,6 +8,12 @@ Fork release (NShoreAFCO/claude-context).
   against the model window and the auto-compact window, next to the percentages, plus the
   time until each 5h/7d window resets (`Context 84k/1M 8% · 84k/400k 21% · 5h 50% 1h 49m ·
   7d 18% 5d 18h`). A 1M window prints as `1M`, not `1000k`. The report is unchanged.
+- **`/claude-context` runs the report.** The skill moved from the plugin root to
+  `skills/claude-context/SKILL.md`. Claude Code loads plugin skills only from `skills/`,
+  so before this the report skill was never registered and `/claude-context` completed
+  to `/claude-context:setup`.
+- **First use sets up.** When the report says `setup_required: true`, the skill runs the
+  setup flow (with its usual confirm before touching a foreign statusline), then reports.
 
 ## 0.3.2
 

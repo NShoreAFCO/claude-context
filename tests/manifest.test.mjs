@@ -1,7 +1,7 @@
 // tests/manifest.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -13,7 +13,13 @@ test('plugin.json has required fields', () => {
   assert.equal(m.name, 'claude-context');
   assert.match(m.version, /^\d+\.\d+\.\d+$/);
   assert.ok(m.commands.includes('./commands/setup.md'));
-  assert.equal(m.skills, undefined, 'no skills field so root SKILL.md auto-loads');
+  assert.equal(m.skills, undefined, 'skills/ is auto-discovered');
+  const plugin = path.join(root, 'plugins', 'claude-context');
+  assert.ok(existsSync(path.join(plugin, 'skills', 'claude-context', 'SKILL.md')));
+  assert.ok(
+    !existsSync(path.join(plugin, 'SKILL.md')),
+    'a root SKILL.md is not loaded by Claude Code',
+  );
 });
 
 test('plugin.json registers both setup and teardown commands', () => {
