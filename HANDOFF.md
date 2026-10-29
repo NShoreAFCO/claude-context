@@ -1,38 +1,60 @@
 # HANDOFF — claude-context fork (resume point)
 
-**Updated:** 2026-10-29, session 46b6824f-0278-48db-9b88-f64162ecebbe
+**Updated:** 2026-10-29, session 89c8bbe7-319c-491d-9176-5af301d13cc1 (previous: 46b6824f)
 **Tracker project:** `claude-context-fork` (owner N. Shore)
 **Repo:** `Devel/claude-context`. `origin` = NShoreAFCO/claude-context (fork), `upstream` = Ovid/claude-context
-**Plan (approved by N. Shore 2026-10-29):** `docs/superpowers/plans/2026-10-29-auto-compact-window-and-gitbash-detection.md`
-
-## Brief for the next session
-
-Start in `Devel/claude-context`. Call tracker `get_context_bundle` for `claude-context-fork`, then execute the plan **natively** (superpowers:executing-plans), Tasks 1 → 4. Stop at the Task 4 Step 4 live check and at the Task 5 gate.
-
-- **Problem 1:** the report measures context against the model window (1M), while the real limit is `autoCompactWindow: 400000` in `~/.claude/settings.json`. Claude Code does not send that setting to the statusline, so the plugin must read it itself (one key only, because settings can hold secrets).
-- **Problem 2:** setup Step 1 reads `$OSTYPE` in the session's primary shell (PowerShell → empty → "unsupported") even though Git Bash is present, and the plugin was already wired (`ours-collect`) and collecting.
-- **Execution mode:** native, with no Copilot (about 150 lines of code plus 150 of tests, below the instruction v2 §4 threshold). Use one branch per task, a PR to fork `main`, and self-merge once `npm test` is green and the review passes. Keep the branches. Upsert the tracker WP at every merge.
-- **Repo rules:** read `CLAUDE.md`. The key one is the "instrument, not advisor" contract: facts only, with a denylist test over the report output. Do not replace the golden fixtures. Docs commits go straight to `main`.
-- **Setup:** run `npm install` once for ESLint and Prettier (`make all`).
+**Plan:** `docs/superpowers/plans/2026-10-29-auto-compact-window-and-gitbash-detection.md`
 
 ## State
 
+Plan Tasks 1–4 are coded, reviewed and merged to fork `main` at **0.3.2** (PRs #1–#5,
+180/180 tests, eslint clean). Branches are kept. Next is the **user live check** (Task 4
+Step 4), then the **G2 gate** (Task 5).
+
 | WP | Status |
 |----|--------|
-| `plan` | finished. **Open:** N. Shore must mark it done/verified in the dashboard (agents may only verify as their own login) |
-| `auto-compact` (Tasks 1–2) | todo, behind gate G1 |
-| `setup-gitbash` (Task 3) | todo, behind gate G1 |
-| `release-verify` (Task 4) | todo |
-| `upstream` (Task 5) | todo, behind gate G2 |
+| `plan` | done (verified) |
+| `auto-compact` | doing 90%: merged; done/verified needs N. Shore |
+| `setup-gitbash` | doing 90%: merged; done/verified needs N. Shore |
+| `release-verify` | doing 70%: waiting on the live check |
+| `upstream` | todo, behind G2 |
 
-**Before coding can start (dashboard, N. Shore):**
-1. Set the project **decision maker** to N. Shore. Agents are refused (`DECISION_MAKER_LOCKED`).
-2. Mark WP `plan` done/verified.
-3. Record **G1 = go** (approval given in session 46b6824f). If the tracker still refuses an agent `record_gate_decision`, decide it in the dashboard.
+## Next steps
 
-## Open points / checkpoints
+1. **Live check (user):** switch the installed plugin to the fork
+   (`/plugin marketplace add NShoreAFCO/claude-context`, reinstall `claude-context`), restart
+   Claude Code, send one message, run `/claude-context`. Expected: `auto_compact_window: 400000`,
+   `source: user`, and `auto_compact_used_percentage` near `/context`'s percentage. Then run
+   `/claude-context:setup` once: it should take the gitbash branch and report `ours-collect`.
+2. **G2:** review the upstream drafts (two issues + PR text). They are re-derivable from the
+   CHANGELOG 0.3.2 entry and PR #1–#4 bodies. After a go, build `upstream/compact-window-gitbash`
+   from `upstream/main` with only the fix commits b5100f4, 2b5e3a6, 142e8fd, 2b172b2 (no plan
+   doc, no version bump) and post.
 
-- **Task 1 Step 1:** confirm the exact name of `autoCompactWindow`, the settings precedence, and whether an env var overrides it, before writing tests.
-- **Task 4 Step 4 (user):** switch the installed plugin to the fork, restart Claude Code, and compare the report with `/context`.
-- **Task 5 (G2 gate):** show the issue and PR drafts to N. Shore before posting under NShoreAFCO. Build the upstream PR from a clean branch off `upstream/main` with only the fix commits (no plan doc, no fork version bump).
-- `/context` at handoff: 122.5k of 400k.
+## What changed vs. the plan (rulings)
+
+- The reader also handles `CLAUDE_CODE_AUTO_COMPACT_WINDOW` (env, highest; k/M suffixes,
+  clamped 100k–1M) and `modelSettings[<model>].autoCompactWindow`. The latter is where
+  `/autocompact` saves, and it beats the top-level key in the same file. **The user's
+  400000 lives there**, so the plan's top-level-only reader would have reported null.
+  Per-model `"auto"` decides as "not configured".
+- `--autocompact`, `--settings` and managed settings are not observable. SKILL.md says so.
+- Settings values are valid only as integers in 100000..1000000 (the documented range).
+  Anything else falls through.
+- Setup probe: from PowerShell, `bash` is not on PATH (Git for Windows adds only `Git\cmd`).
+  Setup now runs `bash -c 'echo $OSTYPE'` with the **Bash tool**, or calls `bin\bash.exe`
+  next to `git` / `CLAUDE_CODE_GIT_BASH_PATH`. Both verified live here, giving `cygwin`.
+  The final review found this, and PR #4 fixed it.
+- The statusline line shows `N% of <effective window>k` (capped at the model window).
+- This clone now has `core.autocrlf=input` (it was `true`, which checked files out CRLF and
+  broke `skill.test`).
+
+## Deferred minors (from the final review)
+
+- Per-model matching normalises both sides, so an exact key is not preferred, and
+  Bedrock/Vertex ids never match.
+- Home-dir dedupe compares paths case-sensitively on Windows.
+- `effectiveWindow(0, acw)` returns `acw` (uncapped) when the model window is unknown. The
+  human line hides it, but the JSON shows it.
+- Settings are read on every tick before the write throttle (3 small sync reads).
+- `compactLine` shows 1M as `1000k`.
