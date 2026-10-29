@@ -14,17 +14,23 @@ command only detects the platform + runtime, asks the one confirm, and calls tha
 
 ## Step 1: Detect platform, shell, and runtime
 
-Use the environment context `Platform:` and `Shell:` values as the starting point.
+Use the environment context `Platform:` value as the starting point.
 
-**On `win32`, run `echo $OSTYPE` first** — a `powershell`/`pwsh`/`cmd` shell whose `$OSTYPE`
-is `msys` or `cygwin` is actually driving a Git Bash environment. Resolve the branch:
+On `darwin` / `linux` the branch is **posix**. On `win32`, run this from any shell
+(PowerShell included) and read its output:
 
-| Platform | Shell | OSTYPE | Branch |
-|----------|-------|--------|--------|
-| `darwin` / `linux` | any | any | **posix** |
-| `win32` | `bash` | any | **gitbash** |
-| `win32` | `powershell`/`pwsh`/`cmd` | `msys` / `cygwin` | **gitbash** |
-| `win32` | `powershell`/`pwsh`/`cmd` | other / empty | **native-powershell** |
+```bash
+bash -c 'echo $OSTYPE'
+```
+
+The wired statusline command itself runs through `bash -c '…'`, so what matters is whether
+the `bash` on `PATH` is Git Bash. The shell this Claude Code session uses is irrelevant.
+
+| `bash -c 'echo $OSTYPE'` output | Branch |
+|---------------------------------|--------|
+| `msys` / `cygwin` | **gitbash** |
+| any other output (e.g. `linux-gnu` from WSL's `bash.exe`) | **native-powershell** |
+| bash not found / error | **native-powershell** |
 
 **If the branch is `native-powershell`: stop here.** This alpha does **not** wire a
 statusline on native PowerShell/cmd (a change from 0.2.0 — see the CHANGELOG). Make **no**
@@ -111,5 +117,5 @@ cat "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/claude-context/snapshot-*.json
 If one exists with a recent `updated_at`, setup worked. If not, re-check: the runtime path
 (`ls -la {RUNTIME_PATH}`); the plugin cache glob
 (`ls "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/claude-context/*/`); on Windows,
-that the branch matches the real environment (`echo $OSTYPE`). The most common cause is not
+that the branch matches the real environment (`bash -c 'echo $OSTYPE'`). The most common cause is not
 having fully restarted Claude Code.
