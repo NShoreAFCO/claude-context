@@ -106,9 +106,10 @@ Or:
 /claude-context
 ```
 
-Reporting requires the one-time `/claude-context:setup` (see below). Before that's
-been run, the report itself explains how to enable it rather than guessing at
-numbers it doesn't have. Once set up, it returns a short human summary **and** a
+Reporting requires the one-time `/claude-context:setup` (see below). If it hasn't been
+run yet, the first `/claude-context` runs setup for you (with the same confirm before
+touching a statusline it doesn't own) and then reports; it never guesses at numbers it
+doesn't have. Once set up, it returns a short human summary **and** a
 machine-readable JSON block, so an agent can parse its own resource state directly:
 
 ```

@@ -6,7 +6,20 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const skill = readFileSync(path.join(root, 'plugins', 'claude-context', 'SKILL.md'), 'utf8');
+const skill = readFileSync(
+  path.join(root, 'plugins', 'claude-context', 'skills', 'claude-context', 'SKILL.md'),
+  'utf8',
+);
+
+test('skill first-use runs setup when the report says setup_required', () => {
+  assert.match(skill, /"setup_required": true/);
+  assert.match(skill, /\$\{CLAUDE_PLUGIN_ROOT\}\/commands\/setup\.md/);
+});
+
+test("skill first-use defers to setup's confirm", () => {
+  assert.match(skill, /foreign/i);
+  assert.match(skill, /proceed\/cancel confirm/);
+});
 
 test('frontmatter declares name and description', () => {
   assert.match(skill, /^---\n[\s\S]*\nname:\s*claude-context\b/m);

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is (read first)
 
-This repo **is** the installable `claude-context` Claude Code plugin, and it is **implemented and shipped**. The plugin itself is nested under `plugins/claude-context/`: its manifest (`plugins/claude-context/.claude-plugin/plugin.json`), `plugins/claude-context/SKILL.md`, `plugins/claude-context/scripts/` (collector + report engine + `lib/` helpers), and `plugins/claude-context/commands/setup.md`. `package.json`, `LICENSE`, `README.md`, the marketplace manifest (`.claude-plugin/marketplace.json`), and the `tests/*.test.mjs` suite stay at the repo root. Run the suite with `npm test` (`node --test tests/*.test.mjs`).
+This repo **is** the installable `claude-context` Claude Code plugin, and it is **implemented and shipped**. The plugin itself is nested under `plugins/claude-context/`: its manifest (`plugins/claude-context/.claude-plugin/plugin.json`), `plugins/claude-context/skills/claude-context/SKILL.md`, `plugins/claude-context/scripts/` (collector + report engine + `lib/` helpers), and `plugins/claude-context/commands/setup.md`. `package.json`, `LICENSE`, `README.md`, the marketplace manifest (`.claude-plugin/marketplace.json`), and the `tests/*.test.mjs` suite stay at the repo root. Run the suite with `npm test` (`node --test tests/*.test.mjs`).
 
 The design and plan under `docs/superpowers/` are **historical design records**, not a to-do list. Where they and the code disagree, **the code wins** — it has evolved past the plan's literal listings (most notably the snapshot is now session-keyed; see Conventions).
 
@@ -19,7 +19,7 @@ The plugin's entire purpose is that **agents and subagents can query their own r
 
 - **No** recommendations, evaluative/level/traffic-light labels, policy ("should compact", 70/85/90 thresholds), or derived/predictive metrics. Raw measurements and provenance only.
 - The plugin supplies facts; the **user's instructions** (CLAUDE.md, skills, subagent prompts) supply any policy. A tool with baked-in thresholds would fight the ones the user wrote.
-- This is enforced by a denylist test over **`report.mjs`'s rendered output** (plan Task 9) — **not** by grepping `plugins/claude-context/SKILL.md`, which legitimately uses words like "makes no recommendations" to *describe* the contract. Don't reintroduce a doc-vocabulary grep; it false-positives on the contract's own wording.
+- This is enforced by a denylist test over **`report.mjs`'s rendered output** (plan Task 9) — **not** by grepping `plugins/claude-context/skills/claude-context/SKILL.md`, which legitimately uses words like "makes no recommendations" to *describe* the contract. Don't reintroduce a doc-vocabulary grep; it false-positives on the contract's own wording.
 
 ## Architecture
 
