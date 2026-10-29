@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { readSnapshot, listSnapshotsByMtime } from './lib/snapshot.mjs';
 import { snapshotDir, snapshotFileName, resolveSessionId } from './lib/config-dir.mjs';
 import { lastAssistantUsage, countCompactions } from './lib/transcript.mjs';
-import { usedTokens, percentage, headroom, numOrNull } from './lib/token-math.mjs';
+import { usedTokens, percentage, headroom, effectiveWindow, numOrNull } from './lib/token-math.mjs';
 import { formatDuration, clockHM } from './lib/time.mjs';
 
 function isProviderModel(id, env = process.env) {
@@ -126,6 +126,9 @@ export function resolveReport({
         cache_read_tokens: usage.cache_read_input_tokens,
         cache_creation_tokens: usage.cache_creation_input_tokens,
         output_tokens: usage.output_tokens,
+        // Settings-derived, like window_size: carried over from the stale snapshot.
+        auto_compact_window: numOrNull(staleSnapshot?.context?.auto_compact_window),
+        auto_compact_window_source: staleSnapshot?.context?.auto_compact_window_source ?? null,
       },
       rateLimits: null,
       rateLimitsStatus: 'unavailable_stale',
@@ -197,6 +200,34 @@ function windowJson(w, now) {
   };
 }
 
+// The configured auto-compact window is reported raw; usage and headroom are measured
+// against the window Claude Code actually applies (capped at the model's window).
+function autoCompactJson(c) {
+  const acw = numOrNull(c?.auto_compact_window);
+  if (acw == null) {
+    return {
+      auto_compact_window: null,
+      auto_compact_window_source: null,
+      auto_compact_used_percentage: null,
+      auto_compact_headroom_tokens: null,
+    };
+  }
+  const eff = effectiveWindow(c.window_size, acw);
+  return {
+    auto_compact_window: acw,
+    auto_compact_window_source: c.auto_compact_window_source ?? null,
+    auto_compact_used_percentage: percentage(c.used_tokens, eff),
+    auto_compact_headroom_tokens: headroom(c.used_tokens, eff),
+  };
+}
+
+const AUTO_COMPACT_SOURCE_LABEL = {
+  env: 'CLAUDE_CODE_AUTO_COMPACT_WINDOW',
+  local: 'local settings',
+  project: 'project settings',
+  user: 'user settings',
+};
+
 function buildJson(r, now) {
   const c = r.context;
   const context = c
@@ -209,6 +240,7 @@ function buildJson(r, now) {
         cache_read_tokens: c.cache_read_tokens,
         cache_creation_tokens: c.cache_creation_tokens,
         output_tokens: c.output_tokens,
+        ...autoCompactJson(c),
       }
     : {
         used_percentage: null,
@@ -219,6 +251,7 @@ function buildJson(r, now) {
         cache_read_tokens: null,
         cache_creation_tokens: null,
         output_tokens: null,
+        ...autoCompactJson(null),
       };
   const json = {
     model: r.model ?? {},
@@ -298,9 +331,13 @@ function buildHuman(r, now) {
   if (c && c.used_percentage == null) {
     lines.push('Context: unavailable — window size not reported yet');
   } else if (c) {
-    lines.push(
-      `Context: ${c.used_percentage}% used · ${kt(c.used_tokens)} / ${kt(c.window_size)} tokens · ${kt(headroom(c.used_tokens, c.window_size))} headroom`,
-    );
+    let line = `Context: ${c.used_percentage}% used · ${kt(c.used_tokens)} / ${kt(c.window_size)} tokens · ${kt(headroom(c.used_tokens, c.window_size))} headroom`;
+    const ac = autoCompactJson(c);
+    if (ac.auto_compact_window != null) {
+      const label = AUTO_COMPACT_SOURCE_LABEL[ac.auto_compact_window_source];
+      line += ` · auto-compact window ${kt(ac.auto_compact_window)}${label ? ` (${label})` : ''} · ${ac.auto_compact_used_percentage}% used · ${kt(ac.auto_compact_headroom_tokens)} headroom`;
+    }
+    lines.push(line);
   } else {
     lines.push(
       'Context: unavailable — no measurement yet (no assistant turn recorded, collector off)',

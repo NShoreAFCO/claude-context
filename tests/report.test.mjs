@@ -283,3 +283,92 @@ test('no-advice contract: rendered output carries no advice/level vocabulary in 
     assert.equal(typeof json.setup_required, 'boolean'); // always present, always boolean
   }
 });
+
+const acRes = {
+  ...collectorRes,
+  context: {
+    ...collectorRes.context,
+    window_size: 1000000,
+    used_tokens: 66780,
+    used_percentage: 7,
+    auto_compact_window: 400000,
+    auto_compact_window_source: 'user',
+  },
+};
+
+test('auto-compact window: JSON carries the configured window, usage and headroom against it', () => {
+  const { json, human } = assembleReport(acRes, NOW);
+  assert.equal(json.context.auto_compact_window, 400000);
+  assert.equal(json.context.auto_compact_window_source, 'user');
+  assert.equal(json.context.auto_compact_used_percentage, 17);
+  assert.equal(json.context.auto_compact_headroom_tokens, 333220);
+  assert.equal(json.context.window_size, 1000000); // model window unchanged
+  assert.match(human, /auto-compact window 400k \(user settings\) · 17% used · 333k headroom$/m);
+});
+
+test('auto-compact larger than model window uses the model window', () => {
+  const res = {
+    ...collectorRes,
+    context: {
+      ...collectorRes.context,
+      window_size: 200000,
+      used_tokens: 50000,
+      used_percentage: 25,
+      auto_compact_window: 400000,
+      auto_compact_window_source: 'project',
+    },
+  };
+  const { json } = assembleReport(res, NOW);
+  assert.equal(json.context.auto_compact_window, 400000); // raw configured value
+  assert.equal(json.context.auto_compact_headroom_tokens, 150000);
+  assert.equal(json.context.auto_compact_used_percentage, 25);
+});
+
+test('no auto-compact window configured: the four fields are null and the human line is unchanged', () => {
+  const { json, human } = assembleReport(collectorRes, NOW);
+  for (const k of [
+    'auto_compact_window',
+    'auto_compact_window_source',
+    'auto_compact_used_percentage',
+    'auto_compact_headroom_tokens',
+  ]) {
+    assert.equal(json.context[k], null, k);
+  }
+  assert.doesNotMatch(human, /auto-compact/);
+});
+
+test('not set up: auto-compact fields are null', () => {
+  const { json } = assembleReport(
+    {
+      source: 'unavailable',
+      model: {},
+      context: null,
+      rateLimits: null,
+      rateLimitsStatus: 'unavailable_collector',
+      cost: null,
+      compactions: null,
+      sessionSelection: null,
+      snapshotAgeSeconds: null,
+      setupRequired: true,
+    },
+    NOW,
+  );
+  assert.equal(json.context.auto_compact_window, null);
+  assert.equal(json.context.auto_compact_window_source, null);
+  assert.equal(json.context.auto_compact_used_percentage, null);
+  assert.equal(json.context.auto_compact_headroom_tokens, null);
+});
+
+test('no-advice contract holds for the auto-compact segment', () => {
+  const { human, json } = assembleReport(acRes, NOW);
+  const blob = `${human}\n${JSON.stringify(json)}`;
+  for (const re of [
+    /should compact/i,
+    /recommend/i,
+    /\byou should\b/i,
+    /\bpressure\b/i,
+    /trigger/i,
+  ]) {
+    assert.doesNotMatch(blob, re);
+  }
+});

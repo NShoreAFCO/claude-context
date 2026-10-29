@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { usedTokens, percentage, num, numOrNull } from './lib/token-math.mjs';
+import { usedTokens, percentage, effectiveWindow, num, numOrNull } from './lib/token-math.mjs';
+import { readAutoCompactWindow } from './lib/auto-compact.mjs';
 import { epochToMs } from './lib/time.mjs';
 import { writeSnapshot } from './lib/snapshot.mjs';
 import { snapshotPath } from './lib/config-dir.mjs';
@@ -33,7 +34,9 @@ function buildRateLimits(rl) {
   return { five_hour: five, seven_day: seven };
 }
 
-export function buildSnapshot(stdin, now) {
+// `autoCompact` is readAutoCompactWindow()'s result; Claude Code does not put the
+// auto-compact window on stdin, so the caller reads it from settings and passes it in.
+export function buildSnapshot(stdin, now, autoCompact = { tokens: null, source: null }) {
   const cw = stdin?.context_window ?? {};
   const usage = cw.current_usage ?? {};
   const windowSize = num(cw.context_window_size);
@@ -49,6 +52,8 @@ export function buildSnapshot(stdin, now) {
       cache_read_tokens: num(usage.cache_read_input_tokens),
       cache_creation_tokens: num(usage.cache_creation_input_tokens),
       output_tokens: num(usage.output_tokens),
+      auto_compact_window: numOrNull(autoCompact?.tokens),
+      auto_compact_window_source: autoCompact?.source ?? null,
     },
     rate_limits: buildRateLimits(stdin?.rate_limits),
     cost: { total_cost_usd: numOrNull(stdin?.cost?.total_cost_usd) },
@@ -60,6 +65,11 @@ export function buildSnapshot(stdin, now) {
 export function compactLine(snapshot) {
   const pct = snapshot.context.used_percentage;
   const parts = [`Context ${pct == null ? '—' : pct}%`];
+  const acw = snapshot.context.auto_compact_window;
+  if (acw != null) {
+    const eff = effectiveWindow(snapshot.context.window_size, acw);
+    parts.push(`${percentage(snapshot.context.used_tokens, eff)}% of ${Math.round(eff / 1000)}k`);
+  }
   const rl = snapshot.rate_limits;
   if (rl?.five_hour?.used_percentage != null) parts.push(`5h ${rl.five_hour.used_percentage}%`);
   if (rl?.seven_day?.used_percentage != null) parts.push(`7d ${rl.seven_day.used_percentage}%`);
@@ -77,7 +87,7 @@ export async function runCli({
   const silent = argv.includes('--silent');
   // readStdin is guarded (returns '' on a stream error) and parseStdinJson falls back to {}.
   const stdin = parseStdinJson(await readInput());
-  const snapshot = buildSnapshot(stdin, now);
+  const snapshot = buildSnapshot(stdin, now, readAutoCompactWindow({ stdin, env }));
   // Key by this session's id (from stdin) so concurrent same-account sessions each
   // write their own file instead of thrashing one shared snapshot.
   const snapPath = snapshotPath(snapshot.session_id, env);
