@@ -1,6 +1,21 @@
 # HANDOFF — claude-context fork (resume point)
 
-**Updated:** 2026-10-29, session 89c8bbe7-319c-491d-9176-5af301d13cc1 (previous: 46b6824f)
+**Updated:** 2026-10-29, session 5323ca0a-cd60-4710-83b0-e0d51b0f98a0 (previous: 89c8bbe7)
+
+## Latest: 0.3.3 on fork main (supersedes "State" below)
+
+0.3.2 live check passed (report 21% vs `/context` 22% of 400k). Installed plugin now
+comes from the fork (`~/.claude/settings.json` `extraKnownMarketplaces.claude-context`
+→ NShoreAFCO). Plan `docs/superpowers/plans/2026-10-29-statusline-tokens-and-report-skill.md`
+executed natively, no agents, no final reviewer (user asked: no agents):
+PR #6 statusline tokens + reset countdowns, PR #7 skill moved to `skills/claude-context/`
++ first-use setup, PR #8 release 0.3.3. 189/189 tests, eslint clean.
+
+Next: user live check (plan Task 3 Step 2): `/plugin` update `claude-context`, restart;
+`/context` Skills lists `claude-context:claude-context`; `/claude-context` prints the
+report; statusline reads `Context 170k/1M 17% · 170k/400k 42% · 5h 56% 1h 33m · …`.
+Then G2: upstream drafts now three issues (add: root SKILL.md never loaded). Upstream
+branch fix commits add b6b6bd4 (skill move) and the statusline commit from PR #6 if wanted.
 **Tracker project:** `claude-context-fork` (owner N. Shore)
 **Repo:** `Devel/claude-context`. `origin` = NShoreAFCO/claude-context (fork), `upstream` = Ovid/claude-context
 **Plan:** `docs/superpowers/plans/2026-10-29-auto-compact-window-and-gitbash-detection.md`
