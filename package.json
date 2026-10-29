@@ -1,6 +1,6 @@
 {
   "name": "claude-context",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Your agents can't manage a budget they can't see — claude-context reports their own context, 5h/7d usage, and cost on demand. Facts only; your rules set the policy.",
   "license": "MIT",
   "type": "module",

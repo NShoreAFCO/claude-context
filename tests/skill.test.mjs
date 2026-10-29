@@ -44,3 +44,8 @@ test('documents whose numbers these are (session context vs account usage)', () 
   assert.match(skill, /\bsession\b/i);
   assert.match(skill, /\bsubagent\b/i);
 });
+
+test('documents ctx-check for sub-agents', () => {
+  assert.match(skill, /## Sub-agents: ctx-check/);
+  assert.match(skill, /scripts\/ctx-check\.mjs/);
+});

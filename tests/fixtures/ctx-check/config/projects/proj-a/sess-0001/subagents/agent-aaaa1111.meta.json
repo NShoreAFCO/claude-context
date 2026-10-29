@@ -1,1 +1,7 @@
-{"agentType":"general-purpose","description":"[redacted]","spawnDepth":1,"model":"haiku","finished":true}
+{
+  "agentType": "general-purpose",
+  "description": "[redacted]",
+  "spawnDepth": 1,
+  "model": "haiku",
+  "finished": true
+}
