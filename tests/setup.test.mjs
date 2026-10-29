@@ -38,6 +38,22 @@ test('platform matrix is POSIX + Git Bash only; native PowerShell is reported un
   assert.match(norm, /Make no settings\.json change/i); // native-PowerShell branch specifically must make NO settings.json change (prior regex coincidentally matched the unrelated foreign-Cancel bullet)
 });
 
+test('win32 decides Git Bash by asking bash itself, from any session shell', () => {
+  const norm = setup.replace(/[*`]/g, '').replace(/\s+/g, ' ');
+  assert.ok(setup.includes("bash -c 'echo $OSTYPE'"), 'the literal bash check');
+  assert.match(norm, /any shell \(PowerShell included\)/i);
+  // The session shell column (PowerShell + empty $OSTYPE) is gone: the session shell is irrelevant.
+  assert.doesNotMatch(setup, /\| Shell \|/);
+  assert.doesNotMatch(setup, /run `echo \$OSTYPE` first/);
+});
+
+test('setup treats non-msys/cygwin bash as native', () => {
+  const norm = setup.replace(/[*`]/g, '').replace(/\s+/g, ' ');
+  assert.match(norm, /msys \/ cygwin \| gitbash/i);
+  assert.match(norm, /linux-gnu/); // WSL bash.exe ahead of Git Bash on PATH
+  assert.match(norm, /not found[^|]*\| native-powershell/i);
+});
+
 test('references teardown and keeps the session-keyed snapshot verification glob', () => {
   assert.match(setup, /\/claude-context:teardown/);
   assert.match(setup, /snapshot-\*\.json/);
