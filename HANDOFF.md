@@ -12,9 +12,8 @@
 - Statusline confirmed live by N. Shore (WP statusline-tokens done). Bare `/claude-context`
   can't be a plugin command; personal shortcut `~/.claude/skills/claude-context/SKILL.md`
   runs the newest installed report.
-- Tracker: G2 must be recorded by N. Shore in the dashboard (agent refused); WP `upstream`
-  is gate-locked until then (target: 80%, waiting on upstream review). report-skill 90%,
-  release-033 awaiting verification.
+- Tracker: G2 go recorded; statusline-tokens, report-skill, release-033 done (verified by
+  N. Shore). WP `upstream` waiting on maintainer review of #4/#5. Nothing else open.
 
 ## Latest: 0.3.3 on fork main (supersedes "State" below)
 
