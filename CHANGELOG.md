@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.3
+
+Fork release (NShoreAFCO/claude-context).
+
+- **Statusline: tokens and reset countdowns.** The collector's own line shows tokens used
+  against the model window and the auto-compact window, next to the percentages, plus the
+  time until each 5h/7d window resets (`Context 84k/1M 8% · 84k/400k 21% · 5h 50% 1h 49m ·
+  7d 18% 5d 18h`). A 1M window prints as `1M`, not `1000k`. The report is unchanged.
+
 ## 0.3.2
 
 Fork release (NShoreAFCO/claude-context). Two fixes; existing fields and states are

@@ -33,3 +33,11 @@ export function effectiveWindow(windowSize, autoCompactWindow) {
   const sizes = [windowSize, autoCompactWindow].filter((v) => typeof v === 'number' && v > 0);
   return sizes.length ? Math.min(...sizes) : null;
 }
+
+// Compact token count for the statusline: 999, 84k, 1M, 1.5M. A value that rounds to 1000k
+// prints as 1M.
+export function formatTokens(n) {
+  if (n < 1000) return String(n);
+  if (Math.round(n / 1000) < 1000) return `${Math.round(n / 1000)}k`;
+  return `${Number((n / 1e6).toFixed(1))}M`;
+}

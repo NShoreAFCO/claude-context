@@ -69,7 +69,7 @@ export async function runCoexist({
       } catch {
         /* best effort */
       }
-      write(`${compactLine(snapshot)}\n`);
+      write(`${compactLine(snapshot, now)}\n`);
     } catch {
       write('\n');
     }
