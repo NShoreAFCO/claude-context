@@ -263,3 +263,50 @@ test('stale snapshot, no transcript: resolveReport falls back to the snapshot co
   assert.equal(json.setup_required, false);
   assert.equal(json.compactions, null); // no transcript_path → unobservable, not a fabricated 0
 });
+
+test('stale snapshot + transcript: auto-compact window comes from the stale snapshot', () => {
+  const dir = tmpDir('stale-acw');
+  const tr = path.join(dir, 'T.jsonl');
+  fs.writeFileSync(
+    tr,
+    `${JSON.stringify({ type: 'assistant', message: { model: 'claude-opus-4-8', usage: { input_tokens: 100000 } } })}\n`,
+  );
+  const past = NOW - 10 * 60 * 1000;
+  const s = { ...stdin, session_id: 'sid-sacw', transcript_path: tr };
+  s.context_window = { ...stdin.context_window, context_window_size: 1000000 };
+  writeSnap(dir, 'sid-sacw', buildSnapshot(s, past, { tokens: 400000, source: 'user' }), past);
+  const res = resolveReport({
+    now: NOW,
+    sessionId: 'sid-sacw',
+    snapshotDir: dir,
+    deps: fs,
+    env: {},
+  });
+  const { json } = assembleReport(res, NOW);
+  assert.equal(json.source, 'transcript');
+  assert.equal(json.context.auto_compact_window, 400000);
+  assert.equal(json.context.auto_compact_window_source, 'user');
+  assert.equal(json.context.auto_compact_used_percentage, 25);
+  assert.equal(json.context.auto_compact_headroom_tokens, 300000);
+});
+
+test('stale snapshot, no transcript: auto-compact window survives from the snapshot context', () => {
+  const dir = tmpDir('stale-acw2');
+  const past = NOW - 10 * 60 * 1000;
+  const snap = buildSnapshot({ ...stdin, session_id: 'sid-sacw2' }, past, {
+    tokens: 400000,
+    source: 'local',
+  });
+  writeSnap(dir, 'sid-sacw2', snap, past);
+  const res = resolveReport({
+    now: NOW,
+    sessionId: 'sid-sacw2',
+    snapshotDir: dir,
+    deps: fs,
+    env: {},
+  });
+  const { json } = assembleReport(res, NOW);
+  assert.equal(json.source, 'collector');
+  assert.equal(json.context.auto_compact_window, 400000);
+  assert.equal(json.context.auto_compact_headroom_tokens, 108000); // capped at the 200k model window
+});

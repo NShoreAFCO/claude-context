@@ -4,6 +4,7 @@ import {
   usedTokens,
   percentage,
   headroom,
+  effectiveWindow,
 } from '../plugins/claude-context/scripts/lib/token-math.mjs';
 
 test('usedTokens sums input + cache read + cache creation', () => {
@@ -32,4 +33,12 @@ test('percentage and headroom', () => {
 test('percentage/headroom guard against zero window', () => {
   assert.equal(percentage(100, 0), null);
   assert.equal(headroom(100, 0), null);
+});
+
+test('effectiveWindow is the smaller positive of model window and auto-compact window', () => {
+  assert.equal(effectiveWindow(1000000, 400000), 400000);
+  assert.equal(effectiveWindow(200000, 400000), 200000);
+  assert.equal(effectiveWindow(1000000, null), 1000000);
+  assert.equal(effectiveWindow(0, 400000), 400000);
+  assert.equal(effectiveWindow(0, null), null);
 });
