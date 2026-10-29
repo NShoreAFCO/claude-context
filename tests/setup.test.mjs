@@ -38,10 +38,15 @@ test('platform matrix is POSIX + Git Bash only; native PowerShell is reported un
   assert.match(norm, /Make no settings\.json change/i); // native-PowerShell branch specifically must make NO settings.json change (prior regex coincidentally matched the unrelated foreign-Cancel bullet)
 });
 
-test('win32 decides Git Bash by asking bash itself, from any session shell', () => {
+test('win32 decides Git Bash by asking the bash Claude Code runs, not the PowerShell PATH', () => {
   const norm = setup.replace(/[*`]/g, '').replace(/\s+/g, ' ');
   assert.ok(setup.includes("bash -c 'echo $OSTYPE'"), 'the literal bash check');
-  assert.match(norm, /any shell \(PowerShell included\)/i);
+  // Git for Windows puts only Git\cmd on PATH, so a bare `bash` from PowerShell is not found.
+  assert.match(norm, /with the Bash tool/i);
+  assert.match(norm, /CLAUDE_CODE_GIT_BASH_PATH/);
+  assert.ok(setup.includes('Get-Command git'), 'PowerShell fallback locates bash.exe next to git');
+  assert.match(norm, /bin\\bash\.exe/);
+  assert.doesNotMatch(norm, /any shell \(PowerShell included\)/i);
   // The session shell column (PowerShell + empty $OSTYPE) is gone: the session shell is irrelevant.
   assert.doesNotMatch(setup, /\| Shell \|/);
   assert.doesNotMatch(setup, /run `echo \$OSTYPE` first/);

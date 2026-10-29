@@ -16,15 +16,25 @@ command only detects the platform + runtime, asks the one confirm, and calls tha
 
 Use the environment context `Platform:` value as the starting point.
 
-On `darwin` / `linux` the branch is **posix**. On `win32`, run this from any shell
-(PowerShell included) and read its output:
+On `darwin` / `linux` the branch is **posix**. On `win32`, ask the bash that Claude Code
+itself runs. Claude Code runs the statusline command (and its own Bash tool) through Git
+Bash, so that bash is what decides. The session's primary shell does not.
 
-```bash
-bash -c 'echo $OSTYPE'
-```
+1. If this session has a Bash tool, run this **with the Bash tool**, even when the primary
+   shell is PowerShell:
 
-The wired statusline command itself runs through `bash -c '…'`, so what matters is whether
-the `bash` on `PATH` is Git Bash. The shell this Claude Code session uses is irrelevant.
+   ```bash
+   bash -c 'echo $OSTYPE'
+   ```
+
+2. Otherwise run it from PowerShell against Git Bash's `bash.exe` directly. Git for Windows
+   puts only `Git\cmd` on `PATH`, so a bare `bash` there is usually not found. Use
+   `CLAUDE_CODE_GIT_BASH_PATH` when it is set, else the `bin\bash.exe` next to `git`:
+
+   ```powershell
+   $b = if ($env:CLAUDE_CODE_GIT_BASH_PATH) { $env:CLAUDE_CODE_GIT_BASH_PATH } else { Join-Path (Split-Path (Split-Path (Get-Command git).Source)) 'bin\bash.exe' }
+   & $b -c 'echo $OSTYPE'
+   ```
 
 | `bash -c 'echo $OSTYPE'` output | Branch |
 |---------------------------------|--------|

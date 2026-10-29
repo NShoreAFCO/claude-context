@@ -212,10 +212,11 @@ co-exists with exactly one prior statusline, not several.
   your `PATH`, and a foreign statusline is re-spawned under bash rather than your native shell.
 - **Native PowerShell / cmd** — setup makes no change this release (see above). Run Claude
   Code from Git Bash for live numbers.
-- **How setup tells them apart on Windows** — it runs `bash -c 'echo $OSTYPE'`, whatever
-  shell the session uses. `msys`/`cygwin` means Git Bash is on `PATH` and setup proceeds
-  (even from a PowerShell session); anything else, including WSL's `bash.exe`
-  (`linux-gnu`) or no `bash` at all, is treated as native PowerShell.
+- **How setup tells them apart on Windows** — it asks the Git Bash that Claude Code runs
+  (its Bash tool, or `bash.exe` next to `git` / `CLAUDE_CODE_GIT_BASH_PATH`) for
+  `$OSTYPE`, whatever the session's primary shell is. `msys`/`cygwin` means setup proceeds,
+  even from a PowerShell session. Anything else, including WSL's `bash.exe` (`linux-gnu`)
+  or no Git Bash at all, is treated as native PowerShell.
 - **File privacy is POSIX-only.** On macOS/Linux the snapshot, the co-existence sidecar, and
   the one-time `settings.json` backup are written owner-only (`0600`). Windows filesystems
   don't honor those mode bits, so on Windows those files are private *by location*, not by OS
