@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.4
+
+Fork release (NShoreAFCO/claude-context).
+
+- **`ctx-check.mjs`: a sub-agent's own context.** A sub-agent shares its parent's session id,
+  so `report.mjs` gives it the controller's number. `scripts/ctx-check.mjs` reads one
+  agent's context (last assistant message's input + cache read + cache creation tokens) and
+  turn count from its own transcript, addressed by `--agent-id` or by a `--tag` text found
+  in the agent's first message; it also reports `spawn_depth` from the agent's meta file.
+  Facts only, one JSON line, errors as `{"error", "detail"}` with exit 2. Documented in the
+  skill under "Sub-agents: ctx-check". The report is unchanged.
+
 ## 0.3.3
 
 Fork release (NShoreAFCO/claude-context).

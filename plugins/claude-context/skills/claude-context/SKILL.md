@@ -115,6 +115,31 @@ private window. Use it to judge whether the parent session is filling up — for
 example, to checkpoint results to a file before it auto-compacts — not as a gauge of
 your own subagent context, which this report does not measure.
 
+## Sub-agents: ctx-check
+
+`report.mjs` keys on the session id, which a sub-agent shares with its parent, so it
+returns the parent's context. To read one agent's own context from its transcript, run (with `$RT` resolved as in "How to run it"):
+
+```bash
+"$RT" "${CLAUDE_PLUGIN_ROOT}/scripts/ctx-check.mjs" [--session-id <id>] [--agent-id <id> | --tag <text>]
+```
+
+- `--session-id` defaults to `CLAUDE_CODE_SESSION_ID`. With neither `--agent-id` nor
+  `--tag` it reads the main session transcript.
+- `--agent-id <id>` reads `subagents/agent-<id>.jsonl` of that session.
+- `--tag <text>` finds the one sub-agent whose first message contains that literal text,
+  for example a unique `ORCH-TAG: ...` line its parent put in its prompt (a sub-agent does
+  not know its own agent id). Zero or several matches are errors.
+
+Output is one JSON line: `context_tokens` (the last assistant message's
+`input_tokens + cache_read_input_tokens + cache_creation_input_tokens`), `context_k`
+(that in thousands, rounded), `turns` (distinct assistant API messages), `agent_id`
+(`null` for the main transcript), `spawn_depth` (from the agent's meta file, else
+`null`), `transcript` (path read) and `source` (`"transcript"`). Errors are
+`{"error": "<code>", "detail": "..."}` with exit code 2; codes are `no_session`,
+`not_found`, `ambiguous_tag`, `bad_args`, `no_usage`. It reports measurements only;
+the thresholds and what to do about them come from your instructions.
+
 ## Sources and reliability
 
 The report resolves to exactly three states, keyed on whether a collector snapshot
