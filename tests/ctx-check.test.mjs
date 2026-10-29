@@ -4,6 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -25,7 +26,7 @@ test('main transcript when neither --agent-id nor --tag', () => {
   const { status, out } = run(['--session-id', 'sess-0001']);
   assert.equal(status, 0);
   assert.equal(out.context_tokens, 89511);
-  assert.equal(out.context_k, 89);
+  assert.equal(out.context_k, 90);
   assert.equal(out.turns, 5);
   assert.equal(out.agent_id, null);
   assert.equal(out.spawn_depth, null);
@@ -107,19 +108,39 @@ test('--agent-id and --tag together is bad_args; so is a path-like agent id', ()
   assert.equal(c.out.error, 'bad_args');
 });
 
-test('turns dedupes assistant lines sharing a message id, and bad JSON lines are skipped', () => {
-  // main fixture has more assistant lines than distinct message ids, plus one bad line
-  const raw = spawnSync('node', ['-e', `
-    const l=require('fs').readFileSync(${JSON.stringify(path.join(configDir, 'projects/proj-a/sess-0001.jsonl'))},'utf8').split('\n');
-    let a=0;for(const s of l){try{if(JSON.parse(s).type==='assistant')a++}catch{}}console.log(a)`], { encoding: 'utf8' });
-  assert.ok(Number(raw.stdout) > 5, 'fixture has duplicate-id assistant lines');
-  assert.ok(raw.stdout.length > 0);
+test('turns dedupes assistant lines sharing a message id; bad JSON lines are skipped', () => {
+  const count = (rel) => {
+    let lines = 0;
+    for (const l of fs
+      .readFileSync(path.join(configDir, 'projects/proj-a', rel), 'utf8')
+      .split('\n')) {
+      try {
+        if (JSON.parse(l).type === 'assistant') lines++;
+      } catch {
+        /* bad line */
+      }
+    }
+    return lines;
+  };
+  assert.equal(count('sess-0001/subagents/agent-bbbb2222.jsonl'), 2, 'two lines, one API message');
+  assert.equal(run(['--session-id', 'sess-0001', '--agent-id', 'bbbb2222']).out.turns, 1);
+  assert.ok(
+    fs
+      .readFileSync(path.join(configDir, 'projects/proj-a/sess-0001.jsonl'), 'utf8')
+      .includes('not json'),
+  );
   assert.equal(run(['--session-id', 'sess-0001']).out.turns, 5);
 });
 
 test('output contains no advice or thresholds (facts only)', () => {
   const { out } = run(['--session-id', 'sess-0001']);
   assert.deepEqual(Object.keys(out).sort(), [
-    'agent_id', 'context_k', 'context_tokens', 'source', 'spawn_depth', 'transcript', 'turns',
+    'agent_id',
+    'context_k',
+    'context_tokens',
+    'source',
+    'spawn_depth',
+    'transcript',
+    'turns',
   ]);
 });
