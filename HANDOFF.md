@@ -1,6 +1,20 @@
 # HANDOFF — claude-context fork (resume point)
 
-**Updated:** 2026-10-29, session 5323ca0a-cd60-4710-83b0-e0d51b0f98a0 (previous: 89c8bbe7)
+**Updated:** 2026-10-29, session 631cd151-a843-473a-8a10-ed27e201ea26 (previous: 5323ca0a)
+
+## Latest: G2 prepared, waiting on N. Shore
+
+0.3.3 live check (partly): in session 631cd151 `/claude-context:claude-context` loaded from
+`skills/claude-context/` and printed the report (`auto_compact_window 400000`, source user,
+session_id match). Statusline line not seen by the agent; N. Shore to confirm it shows tokens
+and countdowns.
+
+G2 prep: branch `upstream/compact-window-gitbash` built in worktree `Devel/cc-upstream`
+(local only, NOT pushed) = upstream/main + b5100f4, 2b5e3a6, 142e8fd, 2b172b2, b6b6bd4
+(CHANGELOG hunk dropped). Statusline feature 3dd38ea left out. 182/182 tests, eslint clean.
+Drafts (3 issues + PR): `docs/superpowers/upstream-drafts.md`.
+After G2 go: push branch to origin, open the three issues on Ovid/claude-context, then the PR
+from NShoreAFCO:upstream/compact-window-gitbash with the issue numbers filled in.
 
 ## Latest: 0.3.3 on fork main (supersedes "State" below)
 
