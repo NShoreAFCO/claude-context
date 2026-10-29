@@ -41,6 +41,15 @@ block, and always succeeds even with no collector running.
 - **context.used_tokens / window_size / headroom_tokens** — tokens in use, the
   window size, and tokens remaining. `used_tokens` = input + cache-read +
   cache-creation.
+- **context.auto_compact_window / auto_compact_window_source** — the configured
+  auto-compact window in tokens, as read from `CLAUDE_CODE_AUTO_COMPACT_WINDOW`
+  (`env`) or the `autoCompactWindow` key (per model under `modelSettings`, or top
+  level) of the `local`, `project` or `user` settings file. `null` when none of these
+  sets it. The `--autocompact` launch flag, `--settings` and managed settings are not
+  visible to the plugin.
+- **context.auto_compact_used_percentage / auto_compact_headroom_tokens** — usage and
+  tokens remaining measured against the auto-compact window, capped at `window_size`
+  as Claude Code caps it. `null` when no auto-compact window is configured.
 - **context.input_tokens / cache_read_tokens / cache_creation_tokens / output_tokens**
   — the token breakdown for the last measured turn.
 - **rate_limits.five_hour / seven_day** — subscription usage windows, each with

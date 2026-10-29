@@ -317,3 +317,34 @@ test('sidecar present but spawn throws synchronously → our line, not a blank s
   assert.equal(code, 0);
   assert.equal(out.trim(), 'Context 50%', 'degrades to our own line instead of blanking');
 });
+
+test('tap run writes the auto-compact window into the snapshot', async () => {
+  const cfg = mkCfg('sleep 999');
+  fs.writeFileSync(path.join(cfg, 'settings.json'), JSON.stringify({ autoCompactWindow: 150000 }));
+  const child = fakeChild();
+  const p = runCoexist({
+    now: 0,
+    readInput: async () => STDIN,
+    env: { CLAUDE_CONFIG_DIR: cfg },
+    spawn: () => child,
+  });
+  assert.ok(await waitFor(() => fs.existsSync(snapFile(cfg))));
+  const snap = JSON.parse(fs.readFileSync(snapFile(cfg), 'utf8'));
+  assert.equal(snap.context.auto_compact_window, 150000);
+  assert.equal(snap.context.auto_compact_window_source, 'user');
+  child.fireClose(0);
+  assert.equal(await p, 0);
+});
+
+test('degraded own-line branch also carries the auto-compact window', async () => {
+  const cfg = mkCfg();
+  fs.writeFileSync(path.join(cfg, 'settings.json'), JSON.stringify({ autoCompactWindow: 150000 }));
+  await runCoexist({
+    now: 0,
+    readInput: async () => STDIN,
+    env: { CLAUDE_CONFIG_DIR: cfg },
+    write: () => {},
+  });
+  const snap = JSON.parse(fs.readFileSync(snapFile(cfg), 'utf8'));
+  assert.equal(snap.context.auto_compact_window, 150000);
+});

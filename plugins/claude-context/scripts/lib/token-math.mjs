@@ -26,3 +26,10 @@ export function headroom(used, windowSize) {
   if (!windowSize || windowSize <= 0) return null;
   return Math.max(0, windowSize - used);
 }
+
+// The window usage is measured against once an auto-compact window is configured: Claude
+// Code caps that window at the model's window, so it is the smaller of the positive values.
+export function effectiveWindow(windowSize, autoCompactWindow) {
+  const sizes = [windowSize, autoCompactWindow].filter((v) => typeof v === 'number' && v > 0);
+  return sizes.length ? Math.min(...sizes) : null;
+}

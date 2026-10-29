@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
+import { percentage } from '../plugins/claude-context/scripts/lib/token-math.mjs';
 import { buildSnapshot, compactLine, runCli } from '../plugins/claude-context/scripts/collect.mjs';
 
 const stdin = {
@@ -176,4 +177,47 @@ test('runCli flags a genuine write failure in the statusline (S1 discovery path)
     },
   });
   assert.match(out, /^Context 50% · snapshot not saved$/m);
+});
+
+const stdin1m = {
+  ...stdin,
+  context_window: { ...stdin.context_window, context_window_size: 1000000, used_percentage: 9 },
+};
+
+test('buildSnapshot stores the auto-compact window next to the model window', () => {
+  const s = buildSnapshot(stdin1m, 0, { tokens: 400000, source: 'user' });
+  assert.equal(s.context.auto_compact_window, 400000);
+  assert.equal(s.context.auto_compact_window_source, 'user');
+  assert.equal(s.context.window_size, 1000000);
+  assert.equal(s.context.used_percentage, 9);
+  const plain = buildSnapshot(stdin1m, 0);
+  assert.equal(plain.context.auto_compact_window, null);
+  assert.equal(plain.context.auto_compact_window_source, null);
+});
+
+test('compactLine adds usage against the auto-compact window when one is configured', () => {
+  const s = buildSnapshot(stdin1m, 0, { tokens: 400000, source: 'user' });
+  const pct = percentage(s.context.used_tokens, 400000);
+  assert.equal(compactLine(s), `Context 9% · ${pct}% of 400k · 5h 25% · 7d 61%`);
+  assert.equal(compactLine(buildSnapshot(stdin1m, 0)), 'Context 9% · 5h 25% · 7d 61%');
+});
+
+test('runCli reads the auto-compact window from the config dir settings', async () => {
+  const cfg = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-acw-'));
+  fs.writeFileSync(path.join(cfg, 'settings.json'), JSON.stringify({ autoCompactWindow: 400000 }));
+  const raw = JSON.stringify({
+    session_id: 'sid-acw',
+    context_window: { context_window_size: 1000000, current_usage: { input_tokens: 100000 } },
+  });
+  await runCli({
+    argv: ['node', 'collect', '--silent'],
+    now: 0,
+    readInput: async () => raw,
+    env: { CLAUDE_CONFIG_DIR: cfg },
+  });
+  const snap = JSON.parse(
+    fs.readFileSync(path.join(cfg, 'claude-context', 'snapshot-sid-acw.json'), 'utf8'),
+  );
+  assert.equal(snap.context.auto_compact_window, 400000);
+  assert.equal(snap.context.auto_compact_window_source, 'user');
 });

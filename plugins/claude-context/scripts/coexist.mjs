@@ -21,11 +21,20 @@ function readSidecar(env, deps) {
 async function defaultLoadSnapshotLib() {
   const collect = await import('./collect.mjs');
   const snap = await import('./lib/snapshot.mjs');
+  const ac = await import('./lib/auto-compact.mjs');
   return {
     buildSnapshot: collect.buildSnapshot,
     compactLine: collect.compactLine,
     writeSnapshot: snap.writeSnapshot,
+    readAutoCompactWindow: ac.readAutoCompactWindow,
   };
+}
+
+// The auto-compact window comes from settings, not stdin. An injected lib without the
+// reader (tests) builds the snapshot without it.
+function buildTapSnapshot(lib, input, now, env) {
+  const stdin = parseStdinJson(input);
+  return lib.buildSnapshot(stdin, now, lib.readAutoCompactWindow?.({ stdin, env }));
 }
 
 export async function runCoexist({
@@ -52,8 +61,9 @@ export async function runCoexist({
   // there is no usable sidecar and when spawning the original throws (below).
   const emitOwnLine = async () => {
     try {
-      const { buildSnapshot, compactLine, writeSnapshot } = await loadSnapshotLib();
-      const snapshot = buildSnapshot(parseStdinJson(input), now);
+      const lib = await loadSnapshotLib();
+      const { compactLine, writeSnapshot } = lib;
+      const snapshot = buildTapSnapshot(lib, input, now, env);
       try {
         writeSnapshot(snapshotPath(snapshot.session_id, env), snapshot, { now, deps });
       } catch {
@@ -107,8 +117,9 @@ export async function runCoexist({
   // Snapshot AFTER the spawn and WITHOUT awaiting the child's exit — a slow/hung/broken
   // original never strands our data.
   try {
-    const { buildSnapshot, writeSnapshot } = await loadSnapshotLib();
-    const snapshot = buildSnapshot(parseStdinJson(input), now);
+    const lib = await loadSnapshotLib();
+    const snapshot = buildTapSnapshot(lib, input, now, env);
+    const { writeSnapshot } = lib;
     writeSnapshot(snapshotPath(snapshot.session_id, env), snapshot, { now, deps });
   } catch {
     /* best-effort; never affects the child */
